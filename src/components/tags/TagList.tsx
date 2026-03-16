@@ -237,10 +237,11 @@ export function TagList({ projectPath, agentName }: TagListProps) {
           aria-label="Filter tags by name"
           className="
             w-full sm:w-48
-            rounded-md border border-border bg-background
+            rounded-md border border-border/60 bg-background
             px-3 py-1.5 text-sm text-foreground placeholder:text-text-muted
-            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
-            transition-colors
+            hover:border-border
+            focus-visible:outline-none focus-visible:border-brand-cyan-500/60 focus-visible:ring-1 focus-visible:ring-brand-cyan-500/30
+            transition-colors duration-150
           "
         />
       </div>

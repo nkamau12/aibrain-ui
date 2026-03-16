@@ -108,7 +108,8 @@ export function FilterPanel({ filters, onFiltersChange }: FilterPanelProps) {
                 bg-surface-2 border border-border/60
                 px-3 text-xs text-text-body
                 placeholder:text-text-muted
-                focus:outline-none focus:border-brand-cyan-500/50 focus:ring-1 focus:ring-brand-cyan-500/25
+                hover:border-border
+                focus-visible:outline-none focus-visible:border-brand-cyan-500/60 focus-visible:ring-1 focus-visible:ring-brand-cyan-500/30
                 transition-colors duration-150
               "
             />
@@ -126,7 +127,8 @@ export function FilterPanel({ filters, onFiltersChange }: FilterPanelProps) {
                 bg-surface-2 border border-border/60
                 px-3 text-xs text-text-body
                 placeholder:text-text-muted
-                focus:outline-none focus:border-brand-cyan-500/50 focus:ring-1 focus:ring-brand-cyan-500/25
+                hover:border-border
+                focus-visible:outline-none focus-visible:border-brand-cyan-500/60 focus-visible:ring-1 focus-visible:ring-brand-cyan-500/30
                 transition-colors duration-150
               "
             />
@@ -204,7 +206,8 @@ export function FilterPanel({ filters, onFiltersChange }: FilterPanelProps) {
                     w-full h-8 rounded-md
                     bg-surface-2 border border-border/60
                     px-3 text-xs text-text-body
-                    focus:outline-none focus:border-brand-cyan-500/50 focus:ring-1 focus:ring-brand-cyan-500/25
+                    hover:border-border
+                    focus-visible:outline-none focus-visible:border-brand-cyan-500/60 focus-visible:ring-1 focus-visible:ring-brand-cyan-500/30
                     transition-colors duration-150
                   "
                 />
@@ -223,7 +226,8 @@ export function FilterPanel({ filters, onFiltersChange }: FilterPanelProps) {
                     w-full h-8 rounded-md
                     bg-surface-2 border border-border/60
                     px-3 text-xs text-text-body
-                    focus:outline-none focus:border-brand-cyan-500/50 focus:ring-1 focus:ring-brand-cyan-500/25
+                    hover:border-border
+                    focus-visible:outline-none focus-visible:border-brand-cyan-500/60 focus-visible:ring-1 focus-visible:ring-brand-cyan-500/30
                     transition-colors duration-150
                   "
                 />

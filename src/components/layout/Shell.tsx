@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Header from './Header'
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 
 /**
  * Root layout for all authenticated routes.
@@ -19,6 +20,9 @@ import Header from './Header'
  */
 export default function Shell() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  // Register global keyboard shortcuts (`/` for search, Escape for modals)
+  useKeyboardShortcuts()
 
   return (
     <div className="flex h-screen overflow-hidden">
