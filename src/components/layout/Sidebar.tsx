@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { NavLink } from 'react-router-dom'
 import { Brain, LayoutDashboard, Search, Tags, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -21,12 +22,17 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+
+  // Focus the close button when sidebar opens on mobile & close on Escape
+  useEffect(() => {
+    if (isOpen) {
+      closeButtonRef.current?.focus()
+    }
+  }, [isOpen])
+
   return (
     <>
-      {/*
-       * Mobile overlay backdrop — tapping it closes the sidebar.
-       * Hidden entirely on md+ so it never intercepts desktop clicks.
-       */}
       {isOpen && (
         <div
           className="fixed inset-0 z-20 bg-black/50 md:hidden"
@@ -36,6 +42,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       )}
 
       <aside
+        onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}
         className={cn(
           // Base: fixed on mobile, relative in the flex row on desktop
           'fixed inset-y-0 left-0 z-30 flex flex-col w-56 bg-sidebar border-r border-border',
@@ -48,18 +55,18 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       >
         {/* Brand */}
         <div className="flex items-center justify-between h-14 px-4 shrink-0 border-b border-border">
-          <div className="flex items-center gap-2">
+          <NavLink to="/" onClick={onClose} className="flex items-center gap-2" aria-label="aiBrain home">
             <Brain className="w-5 h-5 text-brand-cyan-500" aria-hidden />
             <span className="font-semibold text-text-heading tracking-tight">
               aiBrain
             </span>
-          </div>
+          </NavLink>
 
-          {/* Close button — only visible on mobile */}
           <button
+            ref={closeButtonRef}
             type="button"
             aria-label="Close navigation"
-            className="md:hidden w-7 h-7 flex items-center justify-center rounded text-text-muted hover:text-foreground hover:bg-surface-2 transition-colors"
+            className="md:hidden w-7 h-7 flex items-center justify-center rounded text-text-muted hover:text-foreground hover:bg-surface-2 transition-colors focus-visible:outline-2 focus-visible:outline-brand-cyan-500 focus-visible:outline-offset-2"
             onClick={onClose}
           >
             <X className="w-4 h-4" />

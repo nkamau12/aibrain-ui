@@ -28,7 +28,7 @@ export default function Header({ onMenuToggle }: HeaderProps) {
       <button
         type="button"
         aria-label="Toggle navigation"
-        className="md:hidden flex flex-col justify-center items-center w-8 h-8 gap-[5px] shrink-0"
+        className="md:hidden flex flex-col justify-center items-center w-8 h-8 gap-[5px] shrink-0 rounded focus-visible:outline-2 focus-visible:outline-brand-cyan-500 focus-visible:outline-offset-2"
         onClick={onMenuToggle}
       >
         <span className="block w-5 h-0.5 bg-foreground rounded-full" />
