@@ -57,6 +57,17 @@ router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
     const topProjectEntry = [...projectCounts.entries()].sort((a, b) => b[1] - a[1])[0];
     const topAgentEntry = [...agentCounts.entries()].sort((a, b) => b[1] - a[1])[0];
 
+    // All distinct projects and agents, sorted by count descending
+    const projects = [...projectCounts.entries()]
+      .filter(([path]) => path !== '')
+      .sort((a, b) => b[1] - a[1])
+      .map(([path, count]) => ({ path, count }));
+
+    const agents = [...agentCounts.entries()]
+      .filter(([name]) => name !== '')
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count]) => ({ name, count }));
+
     res.json({
       totalMemories: rows.length,
       memoriesThisWeek,
@@ -67,6 +78,8 @@ router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
         ? { name: topAgentEntry[0], count: topAgentEntry[1] }
         : { name: '', count: 0 },
       topTags: tagsResult.tags,
+      projects,
+      agents,
     });
   } catch (err) {
     next(err);

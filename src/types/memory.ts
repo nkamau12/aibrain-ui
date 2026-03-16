@@ -35,6 +35,8 @@ export interface StatsResponse {
   topProject: { path: string; count: number };
   topAgent: { name: string; count: number };
   topTags: TagCount[];
+  projects: Array<{ path: string; count: number }>;
+  agents: Array<{ name: string; count: number }>;
 }
 
 export interface TimelinePoint {

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronUp, X } from 'lucide-react'
 import { useTags } from '@/hooks/useTags'
+import { useStats } from '@/hooks/useStats'
 import { Badge } from '@/components/ui/badge'
 import type { SearchFilters } from '@/types'
 
@@ -23,6 +24,10 @@ export function FilterPanel({ filters, onFiltersChange }: FilterPanelProps) {
 
   const { data: tagsData } = useTags()
   const availableTags = tagsData?.tags ?? []
+
+  const { data: statsData } = useStats()
+  const availableProjects = statsData?.projects ?? []
+  const availableAgents = statsData?.agents ?? []
 
   const activeFilterCount = countActiveFilters(filters)
 
@@ -98,40 +103,53 @@ export function FilterPanel({ filters, onFiltersChange }: FilterPanelProps) {
         <div className="p-4 space-y-5">
           {/* Project path filter */}
           <FilterSection label="Project">
-            <input
-              type="text"
+            <select
               value={filters.projectPath ?? ''}
               onChange={(e) => setFilter('projectPath', e.target.value || undefined)}
-              placeholder="Filter by project path…"
               className="
                 w-full h-8 rounded-md
                 bg-surface-2 border border-border/60
-                px-3 text-xs text-text-body
-                placeholder:text-text-muted
+                px-2 text-xs text-text-body
                 hover:border-border
                 focus-visible:outline-none focus-visible:border-brand-cyan-500/60 focus-visible:ring-1 focus-visible:ring-brand-cyan-500/30
                 transition-colors duration-150
+                [color-scheme:dark]
               "
-            />
+            >
+              <option value="">All projects</option>
+              {availableProjects.map(({ path, count }) => {
+                const label = path.replace(/\/$/, '').split('/').pop() || path
+                return (
+                  <option key={path} value={path}>
+                    {label} ({count})
+                  </option>
+                )
+              })}
+            </select>
           </FilterSection>
 
           {/* Agent name filter */}
           <FilterSection label="Agent">
-            <input
-              type="text"
+            <select
               value={filters.agentName ?? ''}
               onChange={(e) => setFilter('agentName', e.target.value || undefined)}
-              placeholder="Filter by agent name…"
               className="
                 w-full h-8 rounded-md
                 bg-surface-2 border border-border/60
-                px-3 text-xs text-text-body
-                placeholder:text-text-muted
+                px-2 text-xs text-text-body
                 hover:border-border
                 focus-visible:outline-none focus-visible:border-brand-cyan-500/60 focus-visible:ring-1 focus-visible:ring-brand-cyan-500/30
                 transition-colors duration-150
+                [color-scheme:dark]
               "
-            />
+            >
+              <option value="">All agents</option>
+              {availableAgents.map(({ name, count }) => (
+                <option key={name} value={name}>
+                  {name} ({count})
+                </option>
+              ))}
+            </select>
           </FilterSection>
 
           {/* Tags multi-select */}
