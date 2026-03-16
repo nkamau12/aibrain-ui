@@ -199,6 +199,14 @@ interface SearchResultsProps {
   onRetry: () => void
   currentPage: number
   onPageChange: (page: number) => void
+  /** When true, cards enter checkbox-select mode instead of navigate-on-click */
+  selectionMode?: boolean
+  /** Set of currently selected memory IDs */
+  selectedIds?: Set<string>
+  /** Called when a card's selection is toggled */
+  onToggleSelect?: (id: string, shiftKey: boolean) => void
+  /** Called when the user activates selection mode via the "Select" button */
+  onEnterSelectionMode?: () => void
 }
 
 /**
@@ -207,6 +215,9 @@ interface SearchResultsProps {
  *
  * Pagination is entirely client-side: the parent fetches up to 50 results and
  * passes the full array here. This component slices the visible window.
+ *
+ * When `selectionMode` is true, cards switch to checkbox mode and bottom
+ * padding is added to avoid the fixed BatchActionBar overlapping the last row.
  */
 export function SearchResults({
   query,
@@ -216,6 +227,10 @@ export function SearchResults({
   onRetry,
   currentPage,
   onPageChange,
+  selectionMode = false,
+  selectedIds,
+  onToggleSelect,
+  onEnterSelectionMode,
 }: SearchResultsProps) {
   const trimmedQuery = query.trim()
 
@@ -234,23 +249,48 @@ export function SearchResults({
 
   return (
     <div>
-      {/* Result count header */}
-      <p className="mb-4 text-sm text-text-muted">
-        <span className="font-medium text-text-body">{allResults.length}</span>{' '}
-        {allResults.length === 1 ? 'result' : 'results'} for{' '}
-        <span className="text-brand-cyan-400 font-medium">"{trimmedQuery}"</span>
-        {totalPages > 1 && (
-          <span className="ml-2 text-text-muted text-xs">
-            — page {safePage} of {totalPages}
-          </span>
-        )}
-      </p>
+      {/* Result count header with optional Select / Selecting indicator */}
+      <div className="mb-4 flex items-center justify-between">
+        <p className="text-sm text-text-muted">
+          <span className="font-medium text-text-body">{allResults.length}</span>{' '}
+          {allResults.length === 1 ? 'result' : 'results'} for{' '}
+          <span className="text-brand-cyan-400 font-medium">"{trimmedQuery}"</span>
+          {totalPages > 1 && (
+            <span className="ml-2 text-text-muted text-xs">
+              — page {safePage} of {totalPages}
+            </span>
+          )}
+        </p>
 
-      {/* Results grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {pageResults.map((result) => (
-          <SearchResultCard key={result.id} result={result} query={trimmedQuery} />
-        ))}
+        {allResults.length > 0 && !selectionMode && (
+          <button
+            type="button"
+            onClick={onEnterSelectionMode}
+            className="text-xs text-brand-cyan-400 hover:text-brand-cyan-300 transition-colors"
+          >
+            Select
+          </button>
+        )}
+
+        {selectionMode && (
+          <span className="text-xs text-brand-cyan-400">Selecting…</span>
+        )}
+      </div>
+
+      {/* Results grid — bottom padding prevents overlap with the BatchActionBar */}
+      <div className={selectionMode ? 'pb-20' : ''}>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {pageResults.map((result) => (
+            <SearchResultCard
+              key={result.id}
+              result={result}
+              query={trimmedQuery}
+              selectionMode={selectionMode}
+              isSelected={selectedIds?.has(result.id)}
+              onToggleSelect={onToggleSelect}
+            />
+          ))}
+        </div>
       </div>
 
       <Pagination

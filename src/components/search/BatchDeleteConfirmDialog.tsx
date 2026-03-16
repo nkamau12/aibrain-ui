@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import type { BatchDeleteState } from '@/hooks/useDeleteMemories'
 import { Button } from '@/components/ui/button'
 import {
@@ -87,6 +88,7 @@ function IdleView({ memories, onCancel, onConfirm }: IdleViewProps) {
         </Button>
         <Button
           variant="ghost"
+          disabled={count === 0}
           className="bg-brand-rose-600 hover:bg-brand-rose-500 text-white border-transparent"
           onClick={onConfirm}
         >
@@ -228,9 +230,13 @@ export function BatchDeleteConfirmDialog({
   const { status } = deleteState
   const isDeleting = status === 'deleting'
 
-  // Build a lookup map once so ErrorView can resolve summaries by ID without
-  // an O(n²) search inside the render loop.
-  const summaryById = new Map(selectedMemories.map((m) => [m.id, m.summary]))
+  // Memoised lookup map so ErrorView can resolve summaries by ID without
+  // an O(n²) search inside the render loop. Recomputes only when the
+  // selectedMemories array reference changes.
+  const summaryById = useMemo(
+    () => new Map(selectedMemories.map((m) => [m.id, m.summary])),
+    [selectedMemories],
+  )
 
   // Prevent accidental dismissal while a deletion is in flight. For all other
   // states we delegate directly to the caller's handler.

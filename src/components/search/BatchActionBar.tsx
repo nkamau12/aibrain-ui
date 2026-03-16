@@ -49,7 +49,11 @@ export function BatchActionBar({
         "
       >
         {/* Selection count — top row on mobile, left side on sm+ */}
-        <span className="text-text-body text-sm font-medium">
+        <span
+          aria-live="polite"
+          aria-atomic="true"
+          className="text-text-body text-sm font-medium"
+        >
           {selectedCount} selected
         </span>
 

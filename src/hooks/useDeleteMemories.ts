@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api'
-import type { Memory } from '@/types'
+import type { Memory, MemorySearchResult } from '@/types'
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -51,9 +51,10 @@ export function useDeleteMemories(): UseDeleteMemoriesReturn {
   const queryClient = useQueryClient()
   const [state, setState] = useState<BatchDeleteState>(IDLE_STATE)
 
-  // Allows the caller to abort a running operation between iterations.
-  // We use a ref (not state) because mutation doesn't need to trigger a render.
-  const abortedRef = useRef(false)
+  // Generation counter guards against concurrent invocations corrupting state.
+  // Each call to runDeletions claims a generation; any previous run detects that
+  // it is no longer the active run and exits the loop before the next iteration.
+  const runIdRef = useRef(0)
 
   // ---------------------------------------------------------------------------
   // Core deletion loop — extracted so both deleteMemories and retryFailed share it
@@ -63,7 +64,7 @@ export function useDeleteMemories(): UseDeleteMemoriesReturn {
     async (ids: string[]) => {
       if (ids.length === 0) return
 
-      abortedRef.current = false
+      const thisRun = ++runIdRef.current
 
       // Snapshot both cache families for partial-failure recovery
       const previousRecent = queryClient.getQueriesData({ queryKey: ['memories', 'recent'] })
@@ -88,7 +89,7 @@ export function useDeleteMemories(): UseDeleteMemoriesReturn {
 
       queryClient.setQueriesData(
         { queryKey: ['memories', 'search'] },
-        (old: { results: Memory[]; totalFound: number; searchMode: string } | undefined) => {
+        (old: { results: MemorySearchResult[]; totalFound: number; searchMode: string } | undefined) => {
           if (!old) return old
           const filtered = old.results.filter((m) => !idSet.has(m.id))
           return { ...old, results: filtered, totalFound: filtered.length }
@@ -107,7 +108,7 @@ export function useDeleteMemories(): UseDeleteMemoriesReturn {
       const deletedIds: string[] = []
 
       for (const id of ids) {
-        if (abortedRef.current) break
+        if (runIdRef.current !== thisRun) break
 
         try {
           await apiFetch<void>(`/api/memories/${id}`, { method: 'DELETE' })
@@ -182,11 +183,11 @@ export function useDeleteMemories(): UseDeleteMemoriesReturn {
 
   /**
    * Returns all state to idle defaults without triggering any network calls.
-   * Safe to call at any time, including mid-deletion (the abort flag will
-   * cause the loop to exit after the current in-flight request completes).
+   * Bumping the run counter causes any in-flight loop to exit before its next
+   * iteration (after the current in-flight request completes).
    */
   const reset = useCallback(() => {
-    abortedRef.current = true
+    runIdRef.current++
     setState(IDLE_STATE)
   }, [])
 

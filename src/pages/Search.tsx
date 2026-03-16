@@ -1,10 +1,14 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { toast } from 'sonner'
 import { useSearchMemories } from '@/hooks/useMemories'
+import { useDeleteMemories } from '@/hooks/useDeleteMemories'
 import { SearchBar } from '@/components/search/SearchBar'
 import { SearchModeToggle } from '@/components/search/SearchModeToggle'
 import { FilterPanel } from '@/components/search/FilterPanel'
 import { SearchResults } from '@/components/search/SearchResults'
+import { BatchActionBar } from '@/components/search/BatchActionBar'
+import { BatchDeleteConfirmDialog } from '@/components/search/BatchDeleteConfirmDialog'
 import type { SearchFilters } from '@/types'
 
 type SearchMode = 'hybrid' | 'fulltext' | 'vector'
@@ -69,6 +73,7 @@ function filtersToParams(filters: SearchFilters, params: URLSearchParams): URLSe
 // ---------------------------------------------------------------------------
 
 const SEARCH_FETCH_LIMIT = 50
+const PAGE_SIZE = 10
 
 export default function Search() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -82,6 +87,21 @@ export default function Search() {
   const [mode, setMode] = useState<SearchMode>(() => readSearchMode(searchParams.get('mode')))
   const [filters, setFilters] = useState<SearchFilters>(() => filtersFromParams(searchParams))
   const [page, setPage] = useState(1)
+
+  // -------------------------------------------------------------------------
+  // Selection state
+  // -------------------------------------------------------------------------
+
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [lastSelectedId, setLastSelectedId] = useState<string | null>(null)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const {
+    state: deleteState,
+    deleteMemories,
+    retryFailed,
+    reset: resetDeleteState,
+  } = useDeleteMemories()
 
   // -------------------------------------------------------------------------
   // URL sync — write state → URL whenever it changes.
@@ -105,6 +125,35 @@ export default function Search() {
   }, [query, mode, filters])
 
   // -------------------------------------------------------------------------
+  // Clear selection whenever query, filters, mode, or page change so stale
+  // IDs from a previous result set cannot be silently deleted.
+  // -------------------------------------------------------------------------
+
+  useEffect(() => {
+    setSelectedIds(new Set())
+    setLastSelectedId(null)
+  }, [query, mode, filters, page])
+
+  // -------------------------------------------------------------------------
+  // Escape key exits selection mode
+  // -------------------------------------------------------------------------
+
+  useEffect(() => {
+    if (!selectionMode) return
+
+    function handleKeyDown(e: KeyboardEvent) {
+      // Don't intercept Escape when the user is typing in an input
+      if (e.key === 'Escape' && !(e.target instanceof HTMLInputElement)) {
+        setSelectionMode(false)
+        setSelectedIds(new Set())
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [selectionMode])
+
+  // -------------------------------------------------------------------------
   // Data fetching
   // -------------------------------------------------------------------------
 
@@ -116,7 +165,48 @@ export default function Search() {
   )
 
   // -------------------------------------------------------------------------
-  // Handlers
+  // Derived — compute the current page result IDs so selection handlers
+  // can do shift-range selection against the visible result order.
+  // -------------------------------------------------------------------------
+
+  const allResults = data?.results ?? []
+  const totalPages = allResults.length > 0 ? Math.ceil(allResults.length / PAGE_SIZE) : 1
+  const safePage = Math.min(Math.max(page, 1), totalPages)
+  const pageStart = (safePage - 1) * PAGE_SIZE
+  const pageResults = allResults.slice(pageStart, pageStart + PAGE_SIZE)
+
+  // Build the preview list for the delete confirmation dialog. We memoize so
+  // the summaryById Map inside the dialog doesn't rebuild on every keystroke.
+  const selectedMemoryPreviews = useMemo(
+    () =>
+      allResults
+        .filter((r) => selectedIds.has(r.id))
+        .map((r) => ({ id: r.id, summary: r.summary })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedIds, allResults],
+  )
+
+  // -------------------------------------------------------------------------
+  // Watch deleteState transitions and fire toasts / clean up
+  // -------------------------------------------------------------------------
+
+  useEffect(() => {
+    if (deleteState.status === 'done') {
+      const count = deleteState.deletedIds.length
+      toast.success(`Deleted ${count} ${count === 1 ? 'memory' : 'memories'}`)
+      setShowDeleteDialog(false)
+      setSelectionMode(false)
+      setSelectedIds(new Set())
+      setLastSelectedId(null)
+      resetDeleteState()
+    } else if (deleteState.status === 'error') {
+      const failCount = deleteState.failures.length
+      toast.error(`${failCount} ${failCount === 1 ? 'memory' : 'memories'} could not be deleted`)
+    }
+  }, [deleteState.status]) // intentionally not exhaustive — we only care about status changes
+
+  // -------------------------------------------------------------------------
+  // Handlers — search state
   // -------------------------------------------------------------------------
 
   const handleQueryChange = useCallback((nextQuery: string) => {
@@ -136,6 +226,93 @@ export default function Search() {
     // Scroll results back into view smoothly
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [])
+
+  // -------------------------------------------------------------------------
+  // Handlers — selection
+  // -------------------------------------------------------------------------
+
+  const handleToggleSelect = useCallback(
+    (id: string, shiftKey: boolean) => {
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+
+        if (shiftKey && lastSelectedId) {
+          // Compute the range in the current page result order and toggle all
+          // IDs in that range to the same state as the anchor's final state.
+          const ids = pageResults.map((r) => r.id)
+          const anchorIdx = ids.indexOf(lastSelectedId)
+          const targetIdx = ids.indexOf(id)
+
+          if (anchorIdx !== -1 && targetIdx !== -1) {
+            const [from, to] = anchorIdx < targetIdx
+              ? [anchorIdx, targetIdx]
+              : [targetIdx, anchorIdx]
+            // Determine the desired toggle direction from the target's current state
+            const shouldSelect = !prev.has(id)
+            for (let i = from; i <= to; i++) {
+              if (shouldSelect) {
+                next.add(ids[i])
+              } else {
+                next.delete(ids[i])
+              }
+            }
+          } else {
+            // Anchor not visible on this page — fall back to single toggle
+            if (next.has(id)) next.delete(id)
+            else next.add(id)
+          }
+        } else {
+          if (next.has(id)) next.delete(id)
+          else next.add(id)
+        }
+
+        return next
+      })
+
+      setLastSelectedId(id)
+    },
+    [lastSelectedId, pageResults],
+  )
+
+  const handleSelectAll = useCallback(() => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      pageResults.forEach((r) => next.add(r.id))
+      return next
+    })
+  }, [pageResults])
+
+  const handleDeselectAll = useCallback(() => {
+    setSelectedIds(new Set())
+  }, [])
+
+  const handleEnterSelectionMode = useCallback(() => {
+    setSelectionMode(true)
+  }, [])
+
+  const handleExitSelectionMode = useCallback(() => {
+    setSelectionMode(false)
+    setSelectedIds(new Set())
+    setLastSelectedId(null)
+  }, [])
+
+  // -------------------------------------------------------------------------
+  // Handlers — batch delete flow
+  // -------------------------------------------------------------------------
+
+  const handleDeleteSelected = useCallback(() => {
+    setShowDeleteDialog(true)
+  }, [])
+
+  const handleConfirmDelete = useCallback(async () => {
+    await deleteMemories([...selectedIds])
+  }, [deleteMemories, selectedIds])
+
+  const handleDialogClose = useCallback(() => {
+    setShowDeleteDialog(false)
+    handleExitSelectionMode()
+    resetDeleteState()
+  }, [handleExitSelectionMode, resetDeleteState])
 
   // -------------------------------------------------------------------------
   // Render
@@ -186,9 +363,36 @@ export default function Search() {
             onRetry={refetch}
             currentPage={page}
             onPageChange={handlePageChange}
+            selectionMode={selectionMode}
+            selectedIds={selectedIds}
+            onToggleSelect={handleToggleSelect}
+            onEnterSelectionMode={handleEnterSelectionMode}
           />
         </main>
       </div>
+
+      {/* Fixed bottom action bar — shown only in selection mode */}
+      {selectionMode && (
+        <BatchActionBar
+          selectedCount={selectedIds.size}
+          pageCount={pageResults.length}
+          onSelectAll={handleSelectAll}
+          onDeselectAll={handleDeselectAll}
+          onDelete={handleDeleteSelected}
+          onCancel={handleExitSelectionMode}
+        />
+      )}
+
+      {/* Batch delete confirmation dialog */}
+      <BatchDeleteConfirmDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        selectedMemories={selectedMemoryPreviews}
+        deleteState={deleteState}
+        onConfirm={handleConfirmDelete}
+        onRetry={retryFailed}
+        onClose={handleDialogClose}
+      />
     </div>
   )
 }
