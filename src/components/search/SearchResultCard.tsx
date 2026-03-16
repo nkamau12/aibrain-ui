@@ -1,7 +1,9 @@
 import { useNavigate } from 'react-router-dom'
 import { formatDistanceToNow } from 'date-fns'
+import { Check } from 'lucide-react'
 import { Card, CardContent, CardFooter } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
 import type { MemorySearchResult } from '@/types'
 
 // ---------------------------------------------------------------------------
@@ -85,41 +87,78 @@ export function HighlightedText({ text, query }: HighlightedTextProps) {
 export interface SearchResultCardProps {
   result: MemorySearchResult
   query: string
+  /** When true, card is in selection mode — shows checkbox, clicks toggle selection */
+  selectionMode?: boolean
+  /** Whether this specific card is currently selected */
+  isSelected?: boolean
+  /** Called when selection is toggled. shiftKey indicates range-select intent */
+  onToggleSelect?: (id: string, shiftKey: boolean) => void
 }
 
-export function SearchResultCard({ result, query }: SearchResultCardProps) {
+export function SearchResultCard({
+  result,
+  query,
+  selectionMode = false,
+  isSelected = false,
+  onToggleSelect,
+}: SearchResultCardProps) {
   const navigate = useNavigate()
   const shortProject = shortenProjectPath(result.projectPath)
   const relativeTime = formatDistanceToNow(new Date(result.createdAt), { addSuffix: true })
   const scoreLabel = formatScore(result.score)
 
-  function handleClick() {
-    navigate(`/memory/${result.id}`)
+  function handleClick(event: React.MouseEvent<HTMLDivElement>) {
+    if (selectionMode) {
+      onToggleSelect?.(result.id, event.shiftKey)
+    } else {
+      navigate(`/memory/${result.id}`)
+    }
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
-      navigate(`/memory/${result.id}`)
+      if (selectionMode) {
+        // Keyboard-triggered selection never implies shift-range intent
+        onToggleSelect?.(result.id, false)
+      } else {
+        navigate(`/memory/${result.id}`)
+      }
     }
   }
 
   return (
     <Card
-      className="
-        cursor-pointer bg-surface border-border/60
-        transition-all duration-200
-        hover:border-border hover:ring-1 hover:ring-brand-cyan-500/30
-        hover:translate-y-[-1px] hover:shadow-lg hover:shadow-black/30
-        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
-      "
+      className={cn(
+        'relative cursor-pointer bg-surface border-border/60',
+        'transition-all duration-200',
+        'hover:border-border hover:ring-1 hover:ring-brand-cyan-500/30',
+        'hover:translate-y-[-1px] hover:shadow-lg hover:shadow-black/30',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        isSelected && selectionMode && 'ring-2 ring-brand-cyan-500/40 bg-brand-cyan-950/10',
+      )}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
       tabIndex={0}
-      role="button"
-      aria-label={`Open memory: ${result.summary}`}
+      role={selectionMode ? 'checkbox' : 'button'}
+      aria-label={selectionMode ? result.summary : `Open memory: ${result.summary}`}
+      aria-checked={selectionMode ? isSelected : undefined}
     >
-      <CardContent className="pt-4">
+      {selectionMode && (
+        <div
+          className={cn(
+            'absolute top-3 left-3 z-10 size-5 rounded border flex items-center justify-center transition-colors duration-150',
+            isSelected
+              ? 'bg-brand-cyan-500 border-brand-cyan-500 text-white'
+              : 'border-border bg-surface hover:border-text-muted',
+          )}
+          aria-hidden="true"
+        >
+          {isSelected && <Check className="size-3" />}
+        </div>
+      )}
+
+      <CardContent className={cn('pt-4', selectionMode && 'pl-11')}>
         {/* Score badge — top-right inline with summary */}
         <div className="flex items-start gap-2">
           <p className="flex-1 line-clamp-3 text-sm leading-relaxed text-text-body">
@@ -142,7 +181,7 @@ export function SearchResultCard({ result, query }: SearchResultCardProps) {
       </CardContent>
 
       {result.tags.length > 0 && (
-        <CardContent className="pt-0">
+        <CardContent className={cn('pt-0', selectionMode && 'pl-11')}>
           <div className="flex flex-wrap gap-1.5">
             {result.tags.map((tag) => (
               <Badge
