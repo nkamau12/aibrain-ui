@@ -14,9 +14,9 @@ import type { StatsResponse } from '@/types/memory'
  * "/Users/alice/projects/my-app" → "my-app"
  * If the path is empty or has no segments, returns the full string as fallback.
  */
-function lastPathSegment(path: string): string {
+function lastPathSegment(path: string, fallback = '—'): string {
   const segments = path.split('/').filter(Boolean)
-  return segments.at(-1) ?? path
+  return segments.at(-1) ?? fallback
 }
 
 // ---------------------------------------------------------------------------
@@ -110,7 +110,7 @@ function buildCardProps(stats: StatsResponse): StatCardProps[] {
     {
       icon: FolderOpen,
       label: 'Top Project',
-      value: lastPathSegment(stats.topProject.path) || '—',
+      value: lastPathSegment(stats.topProject.path),
       sub: stats.topProject.path
         ? `${stats.topProject.count.toLocaleString()} memories`
         : undefined,
@@ -136,7 +136,15 @@ function buildCardProps(stats: StatsResponse): StatCardProps[] {
  * Grid reflows: 1 col mobile → 2 col tablet → 4 col desktop.
  */
 export function StatsCards() {
-  const { data, isLoading } = useStats()
+  const { data, isLoading, isError } = useStats()
+
+  if (isError) {
+    return (
+      <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+        Failed to load stats. Check that the API server is running.
+      </div>
+    )
+  }
 
   if (isLoading || !data) {
     return (

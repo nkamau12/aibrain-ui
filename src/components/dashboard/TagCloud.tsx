@@ -101,10 +101,19 @@ const MAX_TAGS = 25
 
 export function TagCloud() {
   const navigate = useNavigate()
-  const { data, isLoading } = useTags()
+  const { data, isLoading, isError } = useTags()
 
   function handleTagClick(tag: string) {
     navigate(`/search?tags=${encodeURIComponent(tag)}`)
+  }
+
+  if (isError) {
+    return (
+      <section aria-label="Top tags error">
+        <h2 className="mb-4 text-base font-medium text-text-heading">Top Tags</h2>
+        <p className="text-sm text-destructive">Could not load tags</p>
+      </section>
+    )
   }
 
   if (isLoading) {
