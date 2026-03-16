@@ -1,5 +1,6 @@
 import { useRecentMemories } from '@/hooks/useMemories'
 import { MemoryList } from '@/components/memories/MemoryList'
+import { StatsCards } from '@/components/dashboard/StatsCards'
 
 export default function Dashboard() {
   const { data, isLoading, isError } = useRecentMemories({ limit: 12 })
@@ -12,6 +13,9 @@ export default function Dashboard() {
           Your recent memories and activity at a glance
         </p>
       </div>
+
+      {/* Stats summary */}
+      <StatsCards />
 
       {/* Recent memories section */}
       <section>
