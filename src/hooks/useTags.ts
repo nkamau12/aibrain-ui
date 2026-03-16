@@ -35,5 +35,6 @@ export function useTags(projectPath?: string, agentName?: string) {
       const qs = params.toString()
       return apiFetch<TagsResponse>(`/api/tags${qs ? `?${qs}` : ''}`)
     },
+    staleTime: 60_000, // Prevent duplicate requests when multiple components use the same query
   })
 }

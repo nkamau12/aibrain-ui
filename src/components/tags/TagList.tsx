@@ -118,53 +118,44 @@ interface TagRowProps {
 
 function TagRow({ tagCount, onNavigate }: TagRowProps) {
   return (
-    <div
+    <button
+      type="button"
+      onClick={() => onNavigate(tagCount.tag)}
+      aria-label={`Search memories tagged: ${tagCount.tag} (${tagCount.count} memories)`}
       className="
-        group flex items-center gap-3 rounded-md px-3 py-2.5
+        group flex w-full items-center gap-3 rounded-md px-3 py-2.5
         hover:bg-surface-2/50 transition-colors duration-100
+        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
+        cursor-pointer text-left
       "
     >
       {/* Tag badge */}
-      <button
-        type="button"
-        onClick={() => onNavigate(tagCount.tag)}
-        aria-label={`Search memories tagged: ${tagCount.tag}`}
+      <span
         className="
           inline-flex items-center gap-1.5
           rounded-full border
           px-2.5 py-0.5 text-xs font-medium
           bg-brand-amber-900/50 border-brand-amber-700/40 text-brand-amber-300
-          hover:bg-brand-amber-800/70 hover:border-brand-amber-600/60 hover:text-brand-amber-200
-          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-amber-500/60
-          transition-all duration-100 cursor-pointer shrink-0
+          group-hover:bg-brand-amber-800/70 group-hover:border-brand-amber-600/60 group-hover:text-brand-amber-200
+          transition-all duration-100 shrink-0
         "
       >
         {tagCount.tag}
-      </button>
+      </span>
 
-      {/* Count — takes the remaining space, aligns label to left */}
+      {/* Count */}
       <span className="flex-1 text-sm text-text-muted tabular-nums">
         {tagCount.count}
       </span>
 
-      {/* Search action — always visible (not just on hover) so it's obvious */}
-      <button
-        type="button"
-        onClick={() => onNavigate(tagCount.tag)}
-        aria-label={`Search memories tagged: ${tagCount.tag}`}
-        className="
-          flex items-center gap-1 text-xs text-text-muted
-          hover:text-brand-cyan-400 transition-colors duration-100
-          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
-          rounded
-        "
-      >
+      {/* Arrow indicator */}
+      <span className="flex items-center gap-1 text-xs text-text-muted group-hover:text-brand-cyan-400 transition-colors duration-100">
         <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-100 hidden sm:inline">
           Search
         </span>
         <ArrowRight className="h-3.5 w-3.5 shrink-0" />
-      </button>
-    </div>
+      </span>
+    </button>
   )
 }
 
