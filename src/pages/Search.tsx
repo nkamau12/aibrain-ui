@@ -73,6 +73,10 @@ const SEARCH_FETCH_LIMIT = 50
 export default function Search() {
   const [searchParams, setSearchParams] = useSearchParams()
 
+  useEffect(() => {
+    document.title = 'Search — aiBrain'
+  }, [])
+
   // Derive initial state from URL on first render
   const [query, setQuery] = useState(() => searchParams.get('q') ?? '')
   const [mode, setMode] = useState<SearchMode>(() => readSearchMode(searchParams.get('mode')))
@@ -138,7 +142,7 @@ export default function Search() {
   // -------------------------------------------------------------------------
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="space-y-5">
       {/* Page heading */}
       <div>
         <h1 className="text-2xl font-semibold text-text-heading">Search</h1>

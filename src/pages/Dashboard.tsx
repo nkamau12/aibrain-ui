@@ -1,3 +1,5 @@
+import { useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { useRecentMemories } from '@/hooks/useMemories'
 import { MemoryList } from '@/components/memories/MemoryList'
 import { StatsCards } from '@/components/dashboard/StatsCards'
@@ -7,8 +9,12 @@ import { Timeline } from '@/components/dashboard/Timeline'
 export default function Dashboard() {
   const { data, isLoading, isError } = useRecentMemories({ limit: 12 })
 
+  useEffect(() => {
+    document.title = 'Dashboard — aiBrain'
+  }, [])
+
   return (
-    <div className="space-y-8 p-6">
+    <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-semibold text-text-heading">Dashboard</h1>
         <p className="mt-1 text-sm text-text-muted">
@@ -39,6 +45,10 @@ export default function Dashboard() {
           ) : (
             <MemoryList memories={data?.memories ?? []} />
           )}
+
+          <Link to="/search" className="text-xs text-brand-cyan-400 hover:underline mt-2 inline-block">
+            View all memories →
+          </Link>
         </section>
 
         <aside>

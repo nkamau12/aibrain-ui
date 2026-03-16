@@ -33,7 +33,7 @@ const MODES: { value: SearchMode; label: string; description: string }[] = [
 export function SearchModeToggle({ value, onChange }: SearchModeToggleProps) {
   return (
     <div
-      role="group"
+      role="radiogroup"
       aria-label="Search mode"
       className="inline-flex rounded-lg border border-border/60 bg-surface overflow-hidden"
     >
@@ -46,8 +46,9 @@ export function SearchModeToggle({ value, onChange }: SearchModeToggleProps) {
           <button
             key={mode.value}
             type="button"
+            role="radio"
             onClick={() => onChange(mode.value)}
-            aria-pressed={isActive}
+            aria-checked={isActive}
             title={mode.description}
             className={`
               relative px-4 py-1.5 text-xs font-medium

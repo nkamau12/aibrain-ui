@@ -26,9 +26,12 @@ export function SearchBar({
   const inputRef = useRef<HTMLInputElement>(null)
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Auto-focus on mount
+  // Auto-focus on mount only when there is no initial value — prevents stealing
+  // focus when the user navigates back to Search with an existing query in the URL.
   useEffect(() => {
-    inputRef.current?.focus()
+    if (!initialValue) {
+      inputRef.current?.focus()
+    }
   }, [])
 
   // When initialValue changes (URL restore), sync the input and emit immediately

@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { TagChart } from '@/components/tags/TagChart'
 import { TagList } from '@/components/tags/TagList'
 
@@ -7,8 +8,12 @@ import { TagList } from '@/components/tags/TagList'
  * and navigates to /search pre-filtered by that tag.
  */
 export default function Tags() {
+  useEffect(() => {
+    document.title = 'Tags Explorer — aiBrain'
+  }, [])
+
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       {/* Page heading */}
       <div>
         <h1 className="text-2xl font-semibold text-text-heading">Tags Explorer</h1>

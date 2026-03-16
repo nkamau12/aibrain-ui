@@ -78,7 +78,7 @@ export function MemoryNotFoundState({ message }: NotFoundStateProps) {
   const navigate = useNavigate()
   return (
     <div className="max-w-4xl mx-auto px-4 py-16 flex flex-col items-center gap-6 text-center">
-      <AlertCircle className="size-12 text-text-muted" />
+      <AlertCircle className="size-12 text-brand-rose-400" />
       <div className="space-y-2">
         <h2 className="text-xl font-semibold text-text-heading">Memory not found</h2>
         <p className="text-sm text-text-muted">

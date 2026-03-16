@@ -209,6 +209,7 @@ export function FilterPanel({ filters, onFiltersChange }: FilterPanelProps) {
                     hover:border-border
                     focus-visible:outline-none focus-visible:border-brand-cyan-500/60 focus-visible:ring-1 focus-visible:ring-brand-cyan-500/30
                     transition-colors duration-150
+                    [color-scheme:dark]
                   "
                 />
               </div>
@@ -229,6 +230,7 @@ export function FilterPanel({ filters, onFiltersChange }: FilterPanelProps) {
                     hover:border-border
                     focus-visible:outline-none focus-visible:border-brand-cyan-500/60 focus-visible:ring-1 focus-visible:ring-brand-cyan-500/30
                     transition-colors duration-150
+                    [color-scheme:dark]
                   "
                 />
               </div>
