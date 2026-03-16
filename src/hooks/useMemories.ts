@@ -1,42 +1,16 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api'
+import type { Memory, MemorySearchResult, SearchFilters } from '@/types'
 
 // ---------------------------------------------------------------------------
-// Inline types (src/types/ will be created in task 1.8; these live here
-// until that module is available and hooks are updated to import from it)
+// Local types (not shared — specific to hook API shapes)
 // ---------------------------------------------------------------------------
-
-interface Memory {
-  id: string
-  /** Only present when the request was made with includeContent: true */
-  content?: string
-  summary: string
-  tags: string[]
-  agentName: string
-  sessionId: string
-  projectPath: string
-  createdAt: string
-  metadata: Record<string, unknown>
-}
-
-interface MemorySearchResult extends Memory {
-  /** Relevance score returned by the hybrid search engine */
-  score?: number
-}
 
 interface RecentMemoriesFilters {
   limit?: number
   projectPath?: string
   agentName?: string
   tags?: string[]
-}
-
-interface SearchMemoriesFilters {
-  projectPath?: string
-  agentName?: string
-  tags?: string[]
-  since?: string
-  until?: string
 }
 
 type SearchMode = 'hybrid' | 'fulltext' | 'vector'
@@ -65,7 +39,7 @@ interface SearchMemoriesResponse {
 export const memoryKeys = {
   all: ['memories'] as const,
   recent: (filters?: RecentMemoriesFilters) => ['memories', 'recent', filters ?? {}] as const,
-  search: (query: string, searchMode: SearchMode, filters?: SearchMemoriesFilters, options?: SearchMemoriesOptions) =>
+  search: (query: string, searchMode: SearchMode, filters?: SearchFilters, options?: SearchMemoriesOptions) =>
     ['memories', 'search', query, searchMode, filters ?? {}, options ?? {}] as const,
   detail: (id: string) => ['memories', id] as const,
 }
@@ -104,7 +78,7 @@ export function useRecentMemories(filters?: RecentMemoriesFilters) {
 export function useSearchMemories(
   query: string,
   searchMode: SearchMode = 'hybrid',
-  filters?: SearchMemoriesFilters,
+  filters?: SearchFilters,
   options?: SearchMemoriesOptions,
 ) {
   return useQuery<SearchMemoriesResponse>({
@@ -112,7 +86,7 @@ export function useSearchMemories(
     queryFn: () =>
       apiFetch<SearchMemoriesResponse>('/api/memories/search', {
         method: 'POST',
-        body: JSON.stringify({ query, searchMode, ...filters, ...options }),
+        body: JSON.stringify({ query, searchMode, filters, ...options }),
       }),
     // Only fire when there is a non-empty search term
     enabled: query.trim().length > 0,
@@ -142,9 +116,7 @@ export function useDeleteMemory() {
     mutationFn: (id: string) =>
       apiFetch<void>(`/api/memories/${id}`, { method: 'DELETE' }),
     onSuccess: (_data, id) => {
-      // Remove the exact detail entry immediately
       queryClient.removeQueries({ queryKey: memoryKeys.detail(id) })
-      // Invalidate all recent-memory lists so they re-fetch and drop the deleted item
       queryClient.invalidateQueries({ queryKey: ['memories', 'recent'] })
     },
   })

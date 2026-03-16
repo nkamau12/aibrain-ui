@@ -1,27 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api'
-
-// ---------------------------------------------------------------------------
-// Inline types (will be replaced by imports from src/types/ in task 1.8)
-// ---------------------------------------------------------------------------
-
-interface TagCount {
-  tag: string
-  count: number
-}
-
-interface StatsResponse {
-  totalMemories: number
-  memoriesThisWeek: number
-  topProject: { path: string; count: number }
-  topAgent: { name: string; count: number }
-  topTags: TagCount[]
-}
-
-interface TimelinePoint {
-  date: string
-  count: number
-}
+import type { StatsResponse, TimelinePoint } from '@/types'
 
 // ---------------------------------------------------------------------------
 // Query key factory

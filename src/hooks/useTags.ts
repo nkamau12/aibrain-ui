@@ -1,17 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api'
-
-// ---------------------------------------------------------------------------
-// Inline types (will be replaced by imports from src/types/ in task 1.8)
-// ---------------------------------------------------------------------------
-
-interface TagCount {
-  tag: string
-  count: number
-}
+import type { TagCount } from '@/types'
 
 interface TagsResponse {
   tags: TagCount[]
+  total: number
 }
 
 // ---------------------------------------------------------------------------
