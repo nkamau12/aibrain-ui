@@ -47,11 +47,11 @@ function truncate(text: string, maxChars: number): string {
 
 interface IdleViewProps {
   memories: SelectedMemory[]
-  onCancel: () => void
+  onClose: () => void
   onConfirm: () => void
 }
 
-function IdleView({ memories, onCancel, onConfirm }: IdleViewProps) {
+function IdleView({ memories, onClose, onConfirm }: IdleViewProps) {
   const count = memories.length
   const previewItems = memories.slice(0, MAX_PREVIEW_ITEMS)
   const overflow = count - MAX_PREVIEW_ITEMS
@@ -83,7 +83,7 @@ function IdleView({ memories, onCancel, onConfirm }: IdleViewProps) {
       </ul>
 
       <DialogFooter>
-        <Button variant="ghost" onClick={onCancel}>
+        <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
         <Button
@@ -122,30 +122,6 @@ function DeletingView({ progress, total }: DeletingViewProps) {
           {progress} of {total}
         </p>
       </div>
-    </>
-  )
-}
-
-interface DoneViewProps {
-  count: number
-  onClose: () => void
-}
-
-function DoneView({ count, onClose }: DoneViewProps) {
-  return (
-    <>
-      <DialogHeader>
-        <DialogTitle>Deleted successfully</DialogTitle>
-        <DialogDescription>
-          {count} {count === 1 ? 'memory has' : 'memories have'} been permanently deleted.
-        </DialogDescription>
-      </DialogHeader>
-
-      <DialogFooter>
-        <Button variant="default" onClick={onClose}>
-          Done
-        </Button>
-      </DialogFooter>
     </>
   )
 }
@@ -209,11 +185,14 @@ function ErrorView({ deleteState, summaryById, onClose, onRetry }: ErrorViewProp
 /**
  * Confirmation dialog for batch memory deletion.
  *
- * Renders four distinct states driven by `deleteState.status`:
+ * Renders three distinct states driven by `deleteState.status`:
  *   - idle     → confirmation prompt with memory preview list
  *   - deleting → progress bar (dialog is non-dismissible)
- *   - done     → success message with a single Close button
  *   - error    → partial failure summary with retry option
+ *
+ * The `done` state is never rendered here — the parent (Search.tsx) closes the
+ * dialog immediately on success and shows a toast instead. DoneView was removed
+ * as dead code since the auto-close in Search.tsx always wins the race.
  *
  * The parent is responsible for wiring onConfirm, onRetry, and onClose to
  * the appropriate methods on useDeleteMemories.
@@ -254,7 +233,7 @@ export function BatchDeleteConfirmDialog({
         {status === 'idle' && (
           <IdleView
             memories={selectedMemories}
-            onCancel={() => onOpenChange(false)}
+            onClose={onClose}
             onConfirm={onConfirm}
           />
         )}
@@ -263,13 +242,6 @@ export function BatchDeleteConfirmDialog({
           <DeletingView
             progress={deleteState.progress}
             total={deleteState.total}
-          />
-        )}
-
-        {status === 'done' && (
-          <DoneView
-            count={deleteState.deletedIds.length}
-            onClose={onClose}
           />
         )}
 

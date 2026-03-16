@@ -142,8 +142,8 @@ export default function Search() {
     if (!selectionMode) return
 
     function handleKeyDown(e: KeyboardEvent) {
-      // Don't intercept Escape when the user is typing in an input
-      if (e.key === 'Escape' && !(e.target instanceof HTMLInputElement)) {
+      // Don't intercept Escape when the user is typing in an input or textarea
+      if (e.key === 'Escape' && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
         setSelectionMode(false)
         setSelectedIds(new Set())
       }
@@ -198,11 +198,11 @@ export default function Search() {
       setSelectionMode(false)
       setSelectedIds(new Set())
       setLastSelectedId(null)
+      setPage(1)
       resetDeleteState()
-    } else if (deleteState.status === 'error') {
-      const failCount = deleteState.failures.length
-      toast.error(`${failCount} ${failCount === 1 ? 'memory' : 'memories'} could not be deleted`)
     }
+    // No toast for the error state — ErrorView in the dialog already shows
+    // failure details with a Retry button, so a toast would be redundant.
   }, [deleteState.status]) // intentionally not exhaustive — we only care about status changes
 
   // -------------------------------------------------------------------------
@@ -308,11 +308,15 @@ export default function Search() {
     await deleteMemories([...selectedIds])
   }, [deleteMemories, selectedIds])
 
+  // Close the dialog and reset delete state without touching selection mode.
+  // Cancelling the dialog means the user changed their mind — they should stay
+  // in selection mode so they can adjust their selection or try again.
+  // Selection mode exits only on successful deletion (done useEffect above) or
+  // when the user explicitly clicks Cancel in the BatchActionBar.
   const handleDialogClose = useCallback(() => {
     setShowDeleteDialog(false)
-    handleExitSelectionMode()
     resetDeleteState()
-  }, [handleExitSelectionMode, resetDeleteState])
+  }, [resetDeleteState])
 
   // -------------------------------------------------------------------------
   // Render
