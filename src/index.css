@@ -2,181 +2,249 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+
 /*
- ---break---
+ * ---break---
+ */
+
+/*
+ * shadcn/ui requires this variant definition to enable .dark class theming.
+ * We apply it to <html> in main.tsx so all shadcn components render dark.
  */
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Design system for aibrain-ui — dark theme by default.
+ * ── Design token overrides ────────────────────────────────────────────────
  *
- * Color palette defined via @theme (Tailwind v4) so classes like
- * bg-cyan-500 and text-amber-400 work out of the box.
+ * shadcn/ui uses oklch CSS variables defined by @theme inline below.
+ * We override the :root token values with our aibrain palette.
+ * The app is always dark — no light/dark toggle, no media query switching.
  *
- * CSS custom properties (--variable) are also declared so shadcn/ui
- * component primitives can consume them via its theming system.
- */
-@theme {
-  /* Background surfaces */
-  --color-bg-base:    #0f0f1a;
-  --color-bg-deep:    #1a1a2e;
-  --color-surface:    #1e1e36;
-  --color-surface-2:  #2a2a4a;
-
-  /* Cyan accent — 9-shade scale */
-  --color-cyan-50:  #e0faff;
-  --color-cyan-100: #b3f3ff;
-  --color-cyan-200: #80ebff;
-  --color-cyan-300: #4de3ff;
-  --color-cyan-400: #1adcff;
-  --color-cyan-500: #00d9ff;
-  --color-cyan-600: #00aecb;
-  --color-cyan-700: #008499;
-  --color-cyan-800: #005966;
-  --color-cyan-900: #002e33;
-
-  /* Amber accent — 9-shade scale */
-  --color-amber-50:  #fffae8;
-  --color-amber-100: #fff3c0;
-  --color-amber-200: #ffeb94;
-  --color-amber-300: #ffe368;
-  --color-amber-400: #ffdc4a;
-  --color-amber-500: #ffd93d;
-  --color-amber-600: #ccad31;
-  --color-amber-700: #998226;
-  --color-amber-800: #66571a;
-  --color-amber-900: #332b0d;
-
-  /* Rose accent — 9-shade scale */
-  --color-rose-50:  #ffe8e8;
-  --color-rose-100: #ffc0c0;
-  --color-rose-200: #ff9494;
-  --color-rose-300: #ff8080;
-  --color-rose-400: #ff7575;
-  --color-rose-500: #ff6b6b;
-  --color-rose-600: #cc5555;
-  --color-rose-700: #993f3f;
-  --color-rose-800: #662a2a;
-  --color-rose-900: #331515;
-
-  /* Text scale */
-  --color-text-heading: #ffffff;
-  --color-text-body:    #b0b0c8;
-  --color-text-muted:   #6b6b8a;
-
-  /* Typography */
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-mono: ui-monospace, 'Cascadia Code', Consolas, monospace;
-}
-
-/*
- * CSS variables consumed by shadcn/ui component primitives.
- * These must match the @theme values above so both Tailwind utilities
- * and shadcn's internal var() references resolve to the same colors.
+ * Token reference: https://ui.shadcn.com/themes
  */
 :root {
   color-scheme: dark;
 
-  /* shadcn/ui base tokens */
-  --background:    oklch(1 0 0);      /* #1414... approximate, overridden below */
-  --foreground:    oklch(0.145 0 0);   /* text-body */
+  /* Backgrounds — maps to bg-background, bg-card, bg-popover */
+  --background:   oklch(0.12 0.02 270);    /* ~#0f0f1a */
+  --foreground:   oklch(0.76 0.03 270);    /* ~#b0b0c8 */
 
-  --card:    oklch(1 0 0);
-  --card-foreground:    oklch(0.145 0 0);
+  --card:         oklch(0.17 0.03 270);    /* ~#1e1e36 */
+  --card-foreground: oklch(0.76 0.03 270);
 
-  --popover:    oklch(1 0 0);
-  --popover-foreground:    oklch(0.145 0 0);
+  --popover:      oklch(0.17 0.03 270);
+  --popover-foreground: oklch(0.76 0.03 270);
 
-  --primary:    oklch(0.205 0 0);     /* cyan-500 */
-  --primary-foreground:    oklch(0.985 0 0);
+  /* Primary = cyan accent #00d9ff */
+  --primary:      oklch(0.84 0.18 205);
+  --primary-foreground: oklch(0.10 0.02 270);
 
-  --secondary:    oklch(0.97 0 0);      /* surface-2 */
-  --secondary-foreground:    oklch(0.205 0 0);
+  /* Secondary = surface-2 #2a2a4a */
+  --secondary:    oklch(0.22 0.04 270);
+  --secondary-foreground: oklch(0.76 0.03 270);
 
-  --muted:    oklch(0.97 0 0);
-  --muted-foreground:    oklch(0.556 0 0);   /* text-muted */
+  /* Muted = subtle surface */
+  --muted:        oklch(0.22 0.04 270);
+  --muted-foreground: oklch(0.52 0.04 270);  /* ~#6b6b8a */
 
-  --accent:    oklch(0.97 0 0);
-  --accent-foreground:    oklch(0.205 0 0);
+  /* Accent = same as secondary for hover states */
+  --accent:       oklch(0.22 0.04 270);
+  --accent-foreground: oklch(0.76 0.03 270);
 
-  --destructive:    oklch(0.577 0.245 27.325);   /* rose-500 */
-  --destructive-foreground: 255 255 255;
+  /* Destructive = rose #ff6b6b */
+  --destructive:  oklch(0.72 0.19 20);
+  --destructive-foreground: oklch(1 0 0);
 
-  --border:    oklch(0.922 0 0);
-  --input:    oklch(0.922 0 0);
-  --ring:    oklch(0.708 0 0);
+  /* Borders and inputs */
+  --border:       oklch(0.22 0.04 270);
+  --input:        oklch(0.22 0.04 270);
+  --ring:         oklch(0.84 0.18 205);    /* cyan focus ring */
 
-  --radius:    0.625rem;
+  --radius: 0.5rem;
 
-  /* Chart colors (used by shadcn chart components) */
-  --chart-1:    oklch(0.809 0.105 251.813);
-  --chart-2:    oklch(0.623 0.214 259.815);
-  --chart-3:    oklch(0.546 0.245 262.881);
-  --chart-4:    oklch(0.488 0.243 264.376);
-  --chart-5:    oklch(0.424 0.199 265.638);
-  --sidebar:    oklch(0.985 0 0);
-  --sidebar-foreground:    oklch(0.145 0 0);
-  --sidebar-primary:    oklch(0.205 0 0);
-  --sidebar-primary-foreground:    oklch(0.985 0 0);
-  --sidebar-accent:    oklch(0.97 0 0);
-  --sidebar-accent-foreground:    oklch(0.205 0 0);
-  --sidebar-border:    oklch(0.922 0 0);
-  --sidebar-ring:    oklch(0.708 0 0);
+  /* Chart colors — cyan, amber, rose, purple, blue */
+  --chart-1: oklch(0.84 0.18 205);   /* cyan  #00d9ff */
+  --chart-2: oklch(0.88 0.17 90);    /* amber #ffd93d */
+  --chart-3: oklch(0.72 0.19 20);    /* rose  #ff6b6b */
+  --chart-4: oklch(0.75 0.18 295);   /* purple */
+  --chart-5: oklch(0.70 0.16 245);   /* blue  */
+
+  /* Sidebar tokens */
+  --sidebar:                oklch(0.15 0.03 270);
+  --sidebar-foreground:     oklch(0.76 0.03 270);
+  --sidebar-primary:        oklch(0.84 0.18 205);
+  --sidebar-primary-foreground: oklch(0.10 0.02 270);
+  --sidebar-accent:         oklch(0.22 0.04 270);
+  --sidebar-accent-foreground: oklch(0.76 0.03 270);
+  --sidebar-border:         oklch(0.22 0.04 270);
+  --sidebar-ring:           oklch(0.84 0.18 205);
 }
 
-/* ─── Global reset & base styles ─────────────────────────────────────────── */
+/*
+ * ---break---
+ */
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
+/*
+ * shadcn @theme inline block — maps CSS vars to Tailwind color utilities.
+ * bg-background, text-foreground, bg-primary, etc. all resolve through here.
+ */
+@theme inline {
+  /* Fonts */
+  --font-sans: 'Geist Variable', system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', Consolas, monospace;
+
+  /* Color bridge: Tailwind utilities → CSS variables */
+  --color-background:           var(--background);
+  --color-foreground:           var(--foreground);
+  --color-card:                 var(--card);
+  --color-card-foreground:      var(--card-foreground);
+  --color-popover:              var(--popover);
+  --color-popover-foreground:   var(--popover-foreground);
+  --color-primary:              var(--primary);
+  --color-primary-foreground:   var(--primary-foreground);
+  --color-secondary:            var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted:                var(--muted);
+  --color-muted-foreground:     var(--muted-foreground);
+  --color-accent:               var(--accent);
+  --color-accent-foreground:    var(--accent-foreground);
+  --color-destructive:          var(--destructive);
+  --color-border:               var(--border);
+  --color-input:                var(--input);
+  --color-ring:                 var(--ring);
+  --color-chart-1:              var(--chart-1);
+  --color-chart-2:              var(--chart-2);
+  --color-chart-3:              var(--chart-3);
+  --color-chart-4:              var(--chart-4);
+  --color-chart-5:              var(--chart-5);
+  --color-sidebar:              var(--sidebar);
+  --color-sidebar-foreground:   var(--sidebar-foreground);
+  --color-sidebar-primary:      var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent:       var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border:       var(--sidebar-border);
+  --color-sidebar-ring:         var(--sidebar-ring);
+
+  /* Radius scale */
+  --radius-sm:  calc(var(--radius) * 0.6);
+  --radius-md:  calc(var(--radius) * 0.8);
+  --radius-lg:  var(--radius);
+  --radius-xl:  calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  /*
+   * ── Brand accent scale — available as Tailwind utilities ──────────────
+   * e.g. bg-brand-cyan-500, text-brand-amber-400, border-brand-rose-600
+   */
+
+  /* Cyan accent — #00d9ff base */
+  --color-brand-cyan-50:  #e0faff;
+  --color-brand-cyan-100: #b3f3ff;
+  --color-brand-cyan-200: #80ebff;
+  --color-brand-cyan-300: #4de3ff;
+  --color-brand-cyan-400: #1adcff;
+  --color-brand-cyan-500: #00d9ff;
+  --color-brand-cyan-600: #00aecb;
+  --color-brand-cyan-700: #008499;
+  --color-brand-cyan-800: #005966;
+  --color-brand-cyan-900: #002e33;
+
+  /* Amber accent — #ffd93d base */
+  --color-brand-amber-50:  #fffae8;
+  --color-brand-amber-100: #fff3c0;
+  --color-brand-amber-200: #ffeb94;
+  --color-brand-amber-300: #ffe368;
+  --color-brand-amber-400: #ffdc4a;
+  --color-brand-amber-500: #ffd93d;
+  --color-brand-amber-600: #ccad31;
+  --color-brand-amber-700: #998226;
+  --color-brand-amber-800: #66571a;
+  --color-brand-amber-900: #332b0d;
+
+  /* Rose accent — #ff6b6b base */
+  --color-brand-rose-50:  #ffe8e8;
+  --color-brand-rose-100: #ffc0c0;
+  --color-brand-rose-200: #ff9494;
+  --color-brand-rose-300: #ff8080;
+  --color-brand-rose-400: #ff7575;
+  --color-brand-rose-500: #ff6b6b;
+  --color-brand-rose-600: #cc5555;
+  --color-brand-rose-700: #993f3f;
+  --color-brand-rose-800: #662a2a;
+  --color-brand-rose-900: #331515;
+
+  /* Surface tokens — available as bg-surface, bg-surface-2 */
+  --color-surface:   #1e1e36;
+  --color-surface-2: #2a2a4a;
+
+  /* Text semantic tokens */
+  --color-text-heading: #ffffff;
+  --color-text-body:    #b0b0c8;
+  --color-text-muted:   #6b6b8a;
 }
 
-html {
-  /* Force dark theme globally — this app has no light mode */
-  color-scheme: dark;
-}
+/*
+ * ---break---
+ */
 
-body {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: 14px;
-  line-height: 1.5;
-  color: #b0b0c8;
-  /* Full-height dark gradient background */
-  background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 100%);
-  background-attachment: fixed;
-  min-height: 100vh;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+/*
+ * shadcn @layer base — applies border and body defaults.
+ * We add our own overrides here to ensure dark theme is always active.
+ */
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
 
-#root {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
+  html {
+    @apply font-sans;
+    color-scheme: dark;
+  }
 
-/* ─── Typography defaults ─────────────────────────────────────────────────── */
+  body {
+    /*
+     * Override shadcn's bg-background with our gradient.
+     * bg-background would be a flat #0f0f1a — we want the gradient instead.
+     */
+    background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 100%);
+    background-attachment: fixed;
+    color: #b0b0c8;
+    min-height: 100vh;
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 
-h1, h2, h3, h4, h5, h6 {
-  color: #ffffff;
-  font-weight: 600;
-  line-height: 1.2;
-  margin: 0;
-}
+  #root {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
 
-p {
-  margin: 0;
-}
+  h1, h2, h3, h4, h5, h6 {
+    color: #ffffff;
+    font-weight: 600;
+    line-height: 1.2;
+    margin: 0;
+  }
 
-a {
-  color: #00d9ff;
-  text-decoration: none;
-}
+  p {
+    margin: 0;
+  }
 
-a:hover {
-  text-decoration: underline;
+  a {
+    color: #00d9ff;
+    text-decoration: none;
+  }
+
+  a:hover {
+    text-decoration: underline;
+  }
 }
 
 /* ─── Scrollbar styling ───────────────────────────────────────────────────── */
@@ -211,104 +279,4 @@ a:hover {
 ::selection {
   background: rgba(0, 217, 255, 0.25);
   color: #ffffff;
-}
-
-/*
- ---break---
- */
-
-.dark {
-  --background:    oklch(0.145 0 0);
-  --foreground:    oklch(0.985 0 0);
-  --card:    oklch(0.205 0 0);
-  --card-foreground:    oklch(0.985 0 0);
-  --popover:    oklch(0.205 0 0);
-  --popover-foreground:    oklch(0.985 0 0);
-  --primary:    oklch(0.922 0 0);
-  --primary-foreground:    oklch(0.205 0 0);
-  --secondary:    oklch(0.269 0 0);
-  --secondary-foreground:    oklch(0.985 0 0);
-  --muted:    oklch(0.269 0 0);
-  --muted-foreground:    oklch(0.708 0 0);
-  --accent:    oklch(0.269 0 0);
-  --accent-foreground:    oklch(0.985 0 0);
-  --destructive:    oklch(0.704 0.191 22.216);
-  --border:    oklch(1 0 0 / 10%);
-  --input:    oklch(1 0 0 / 15%);
-  --ring:    oklch(0.556 0 0);
-  --chart-1:    oklch(0.809 0.105 251.813);
-  --chart-2:    oklch(0.623 0.214 259.815);
-  --chart-3:    oklch(0.546 0.245 262.881);
-  --chart-4:    oklch(0.488 0.243 264.376);
-  --chart-5:    oklch(0.424 0.199 265.638);
-  --sidebar:    oklch(0.205 0 0);
-  --sidebar-foreground:    oklch(0.985 0 0);
-  --sidebar-primary:    oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground:    oklch(0.985 0 0);
-  --sidebar-accent:    oklch(0.269 0 0);
-  --sidebar-accent-foreground:    oklch(0.985 0 0);
-  --sidebar-border:    oklch(1 0 0 / 10%);
-  --sidebar-ring:    oklch(0.556 0 0);
-}
-
-/*
- ---break---
- */
-
-@theme inline {
-  --font-sans:    'Geist Variable', sans-serif;
-  --color-sidebar-ring:    var(--sidebar-ring);
-  --color-sidebar-border:    var(--sidebar-border);
-  --color-sidebar-accent-foreground:    var(--sidebar-accent-foreground);
-  --color-sidebar-accent:    var(--sidebar-accent);
-  --color-sidebar-primary-foreground:    var(--sidebar-primary-foreground);
-  --color-sidebar-primary:    var(--sidebar-primary);
-  --color-sidebar-foreground:    var(--sidebar-foreground);
-  --color-sidebar:    var(--sidebar);
-  --color-chart-5:    var(--chart-5);
-  --color-chart-4:    var(--chart-4);
-  --color-chart-3:    var(--chart-3);
-  --color-chart-2:    var(--chart-2);
-  --color-chart-1:    var(--chart-1);
-  --color-ring:    var(--ring);
-  --color-input:    var(--input);
-  --color-border:    var(--border);
-  --color-destructive:    var(--destructive);
-  --color-accent-foreground:    var(--accent-foreground);
-  --color-accent:    var(--accent);
-  --color-muted-foreground:    var(--muted-foreground);
-  --color-muted:    var(--muted);
-  --color-secondary-foreground:    var(--secondary-foreground);
-  --color-secondary:    var(--secondary);
-  --color-primary-foreground:    var(--primary-foreground);
-  --color-primary:    var(--primary);
-  --color-popover-foreground:    var(--popover-foreground);
-  --color-popover:    var(--popover);
-  --color-card-foreground:    var(--card-foreground);
-  --color-card:    var(--card);
-  --color-foreground:    var(--foreground);
-  --color-background:    var(--background);
-  --radius-sm:    calc(var(--radius) * 0.6);
-  --radius-md:    calc(var(--radius) * 0.8);
-  --radius-lg:    var(--radius);
-  --radius-xl:    calc(var(--radius) * 1.4);
-  --radius-2xl:    calc(var(--radius) * 1.8);
-  --radius-3xl:    calc(var(--radius) * 2.2);
-  --radius-4xl:    calc(var(--radius) * 2.6);
-}
-
-/*
- ---break---
- */
-
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
-  html {
-    @apply font-sans;
-  }
 }
