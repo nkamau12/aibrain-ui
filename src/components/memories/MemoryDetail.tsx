@@ -188,6 +188,14 @@ interface MemoryDetailProps {
  * Intentionally a pure presentational component — the page that mounts it
  * is responsible for data fetching via useMemory(id).
  */
+function safeGoBack(navigate: ReturnType<typeof useNavigate>) {
+  if (window.history.length > 1) {
+    navigate(-1)
+  } else {
+    navigate('/')
+  }
+}
+
 export function MemoryDetail({ memory }: MemoryDetailProps) {
   const navigate = useNavigate()
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -206,7 +214,7 @@ export function MemoryDetail({ memory }: MemoryDetailProps) {
       onSuccess: () => {
         setShowDeleteConfirm(false)
         toast.success('Memory deleted successfully')
-        navigate(-1)
+        safeGoBack(navigate)
       },
       onError: (error) => {
         toast.error(`Failed to delete memory: ${error.message}`)
@@ -222,7 +230,7 @@ export function MemoryDetail({ memory }: MemoryDetailProps) {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate(-1)}
+            onClick={() => safeGoBack(navigate)}
             className="gap-1.5 text-text-muted hover:text-text-body"
           >
             <ArrowLeft className="size-4" />

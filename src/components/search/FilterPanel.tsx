@@ -93,7 +93,7 @@ export function FilterPanel({ filters, onFiltersChange }: FilterPanelProps) {
       {/* Panel body — hidden on mobile unless toggled; always visible on md+ */}
       <div
         id="filter-panel-body"
-        className={`${mobileOpen ? 'block' : 'hidden'} md:block`}
+        className={`${mobileOpen ? 'block' : 'hidden'} lg:block`}
       >
         <div className="p-4 space-y-5">
           {/* Project path filter */}

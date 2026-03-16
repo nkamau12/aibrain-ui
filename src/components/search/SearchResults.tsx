@@ -164,7 +164,7 @@ function HighlightedText({ text, query }: HighlightedTextProps) {
   return (
     <>
       {parts.map((part, i) =>
-        pattern.test(part) ? (
+        new RegExp(tokens.join('|'), 'i').test(part) ? (
           <strong key={i} className="text-text-heading font-semibold">
             {part}
           </strong>

@@ -106,18 +106,73 @@ export function useMemory(id: string | undefined) {
 }
 
 /**
- * Deletes a memory by ID and invalidates both the deleted item's cache entry
- * and the recent-memories list so any visible lists refresh automatically.
+ * Deletes a memory by ID with optimistic removal from cached lists.
+ * On success: invalidates recent + search caches for a fresh re-fetch.
+ * On error: rolls back the optimistic removal and restores previous state.
  */
 export function useDeleteMemory() {
   const queryClient = useQueryClient()
 
-  return useMutation<void, Error, string>({
+  return useMutation<void, Error, string, { previousRecent: unknown; previousSearch: unknown[] }>({
     mutationFn: (id: string) =>
       apiFetch<void>(`/api/memories/${id}`, { method: 'DELETE' }),
+
+    onMutate: async (id) => {
+      // Cancel in-flight queries so they don't overwrite our optimistic update
+      await queryClient.cancelQueries({ queryKey: ['memories', 'recent'] })
+      await queryClient.cancelQueries({ queryKey: ['memories', 'search'] })
+
+      // Snapshot current cache for rollback
+      const recentQueries = queryClient.getQueriesData({ queryKey: ['memories', 'recent'] })
+      const searchQueries = queryClient.getQueriesData({ queryKey: ['memories', 'search'] })
+
+      // Optimistically remove the memory from all recent-memories caches
+      queryClient.setQueriesData(
+        { queryKey: ['memories', 'recent'] },
+        (old: { memories: Memory[]; total: number } | undefined) => {
+          if (!old) return old
+          return {
+            ...old,
+            memories: old.memories.filter((m) => m.id !== id),
+            total: old.total - 1,
+          }
+        },
+      )
+
+      // Optimistically remove from all search result caches
+      queryClient.setQueriesData(
+        { queryKey: ['memories', 'search'] },
+        (old: { results: Memory[]; totalFound: number; searchMode: string } | undefined) => {
+          if (!old) return old
+          return {
+            ...old,
+            results: old.results.filter((m) => m.id !== id),
+            totalFound: old.totalFound - 1,
+          }
+        },
+      )
+
+      return { previousRecent: recentQueries, previousSearch: searchQueries }
+    },
+
+    onError: (_error, _id, context) => {
+      // Rollback: restore all cached queries from snapshots
+      if (context?.previousRecent) {
+        for (const [key, data] of context.previousRecent as [unknown[], unknown][]) {
+          queryClient.setQueryData(key, data)
+        }
+      }
+      if (context?.previousSearch) {
+        for (const [key, data] of context.previousSearch as [unknown[], unknown][]) {
+          queryClient.setQueryData(key, data)
+        }
+      }
+    },
+
     onSuccess: (_data, id) => {
       queryClient.removeQueries({ queryKey: memoryKeys.detail(id) })
       queryClient.invalidateQueries({ queryKey: ['memories', 'recent'] })
+      queryClient.invalidateQueries({ queryKey: ['memories', 'search'] })
     },
   })
 }
