@@ -11,6 +11,8 @@ interface RecentMemoriesFilters {
   projectPath?: string
   agentName?: string
   tags?: string[]
+  since?: string
+  until?: string
 }
 
 type SearchMode = 'hybrid' | 'fulltext' | 'vector'
@@ -52,9 +54,9 @@ export const memoryKeys = {
  * Fetches recent memories, optionally filtered by projectPath, agentName,
  * tags, and limit. Re-fetches automatically when filters change.
  */
-export function useRecentMemories(filters?: RecentMemoriesFilters) {
+export function useRecentMemories(filters?: RecentMemoriesFilters | undefined) {
   return useQuery<RecentMemoriesResponse>({
-    queryKey: memoryKeys.recent(filters),
+    queryKey: memoryKeys.recent(filters ?? {}),
     queryFn: () => {
       const params = new URLSearchParams()
       if (filters?.limit != null) params.set('limit', String(filters.limit))
@@ -63,9 +65,13 @@ export function useRecentMemories(filters?: RecentMemoriesFilters) {
       if (filters?.tags?.length) {
         filters.tags.forEach((tag) => params.append('tags', tag))
       }
+      if (filters?.since) params.set('since', filters.since)
+      if (filters?.until) params.set('until', filters.until)
       const qs = params.toString()
       return apiFetch<RecentMemoriesResponse>(`/api/memories/recent${qs ? `?${qs}` : ''}`)
     },
+    // When filters is explicitly undefined (not just empty), disable the query
+    enabled: filters !== undefined,
   })
 }
 

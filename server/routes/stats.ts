@@ -11,7 +11,8 @@ const router = Router();
  */
 async function fetchAllRows(): Promise<Array<Record<string, unknown>>> {
   const table = await getTable();
-  const rows = await table.query().toArray();
+  // LanceDB defaults to limit=10 without an explicit .limit() call
+  const rows = await table.query().limit(1_000_000).toArray();
   return rows as Array<Record<string, unknown>>;
 }
 

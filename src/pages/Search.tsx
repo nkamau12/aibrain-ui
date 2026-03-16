@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { useSearchMemories } from '@/hooks/useMemories'
+import { useSearchMemories, useRecentMemories } from '@/hooks/useMemories'
 import { useDeleteMemories } from '@/hooks/useDeleteMemories'
 import { SearchBar } from '@/components/search/SearchBar'
 import { SearchModeToggle } from '@/components/search/SearchModeToggle'
@@ -155,14 +155,42 @@ export default function Search() {
 
   // -------------------------------------------------------------------------
   // Data fetching
+  //
+  // When the user has typed a query → use search (hybrid/fulltext/vector).
+  // When the query is empty but filters are set (e.g. navigated from Tags
+  // page with ?tags=foo) → fall back to useRecentMemories with those filters.
   // -------------------------------------------------------------------------
 
-  const { data, isLoading, isError, refetch } = useSearchMemories(
+  const hasQuery = query.trim().length > 0
+  const hasFilters = Boolean(
+    filters.projectPath || filters.agentName || filters.tags?.length || filters.since || filters.until,
+  )
+
+  const searchResult = useSearchMemories(
     query,
     mode,
     filters,
     { limit: SEARCH_FETCH_LIMIT },
   )
+
+  const browseResult = useRecentMemories(
+    !hasQuery && hasFilters
+      ? { limit: 100, ...filters }
+      : undefined,
+  )
+
+  // Pick the active result set based on whether we have a query
+  const activeResult = hasQuery ? searchResult : browseResult
+  const { isLoading, isError } = activeResult
+  const refetch = activeResult.refetch
+
+  // Normalise the two response shapes into a single results array
+  const data = hasQuery
+    ? searchResult.data
+    : browseResult.data
+      ? { results: browseResult.data.memories.map((m) => ({ ...m, score: undefined })) }
+      : undefined
+  const showBrowseMode = !hasQuery && hasFilters
 
   // -------------------------------------------------------------------------
   // Derived — compute the current page result IDs so selection handlers
@@ -371,6 +399,7 @@ export default function Search() {
             selectedIds={selectedIds}
             onToggleSelect={handleToggleSelect}
             onEnterSelectionMode={handleEnterSelectionMode}
+            browseMode={showBrowseMode}
           />
         </main>
       </div>

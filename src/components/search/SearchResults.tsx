@@ -207,6 +207,8 @@ interface SearchResultsProps {
   onToggleSelect?: (id: string, shiftKey: boolean) => void
   /** Called when the user activates selection mode via the "Select" button */
   onEnterSelectionMode?: () => void
+  /** When true, we're browsing by filters (e.g. tag) without a search query */
+  browseMode?: boolean
 }
 
 /**
@@ -231,16 +233,22 @@ export function SearchResults({
   selectedIds,
   onToggleSelect,
   onEnterSelectionMode,
+  browseMode = false,
 }: SearchResultsProps) {
   const trimmedQuery = query.trim()
 
-  if (!trimmedQuery) return <EmptyQueryPrompt />
+  // Show empty prompt only when there's no query AND we're not browsing by filters
+  if (!trimmedQuery && !browseMode) return <EmptyQueryPrompt />
   if (isLoading) return <LoadingSkeletons />
   if (isError) return <SearchError onRetry={onRetry} />
 
   const allResults = results ?? []
 
-  if (allResults.length === 0) return <NoResults query={trimmedQuery} />
+  if (allResults.length === 0) {
+    return browseMode
+      ? <NoResults query="the active filters" />
+      : <NoResults query={trimmedQuery} />
+  }
 
   const totalPages = Math.ceil(allResults.length / PAGE_SIZE)
   const safePage = Math.min(Math.max(currentPage, 1), totalPages)
@@ -253,8 +261,14 @@ export function SearchResults({
       <div className="mb-4 flex items-center justify-between">
         <p className="text-sm text-text-muted">
           <span className="font-medium text-text-body">{allResults.length}</span>{' '}
-          {allResults.length === 1 ? 'result' : 'results'} for{' '}
-          <span className="text-brand-cyan-400 font-medium">"{trimmedQuery}"</span>
+          {allResults.length === 1 ? 'memory' : 'memories'}
+          {trimmedQuery ? (
+            <>
+              {' '}for <span className="text-brand-cyan-400 font-medium">"{trimmedQuery}"</span>
+            </>
+          ) : (
+            <> matching current filters</>
+          )}
           {totalPages > 1 && (
             <span className="ml-2 text-text-muted text-xs">
               — page {safePage} of {totalPages}
