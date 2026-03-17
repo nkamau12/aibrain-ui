@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import { resetTableCache } from '../../aibrain-mcp/src/db/init.js';
 import memoriesRouter from './routes/memories.js';
 import tagsRouter from './routes/tags.js';
 import statsRouter from './routes/stats.js';
@@ -10,6 +11,13 @@ const PORT = process.env.PORT ?? 3001;
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Reset the LanceDB table cache before each request so we always read
+// the latest data, including rows written by the MCP server process.
+app.use((_req, _res, next) => {
+  resetTableCache();
+  next();
+});
 
 // Routes
 app.use('/api/memories', memoriesRouter);

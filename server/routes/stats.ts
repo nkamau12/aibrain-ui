@@ -4,6 +4,14 @@ import { getTable } from '../../../aibrain-mcp/src/db/init.js';
 
 const router = Router();
 
+/** Format a Date as "YYYY-MM-DD" in the server's local timezone. */
+function toLocalDateString(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 /**
  * Fetch all memory rows directly from LanceDB for aggregation.
  * We bypass getRecentMemories() because its limit cap (100) would corrupt
@@ -105,7 +113,7 @@ router.get('/timeline', async (req: Request, res: Response, next: NextFunction) 
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(d.getDate() - i);
-      dateLabels.push(d.toISOString().slice(0, 10));
+      dateLabels.push(toLocalDateString(d));
     }
 
     const cutoff = dateLabels[0]; // earliest date we care about
@@ -117,7 +125,7 @@ router.get('/timeline', async (req: Request, res: Response, next: NextFunction) 
       const createdAt = row.createdAt as string | undefined;
       if (!createdAt) continue;
 
-      const dateKey = createdAt.slice(0, 10);
+      const dateKey = toLocalDateString(new Date(createdAt));
       if (dateKey < cutoff) continue;
 
       countsByDate.set(dateKey, (countsByDate.get(dateKey) ?? 0) + 1);
