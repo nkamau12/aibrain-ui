@@ -6,7 +6,7 @@ import type { ForceGraphMethods as ForceGraph3DMethods } from 'react-force-graph
 import * as THREE from 'three'
 import type { GraphData, GraphNode, GraphLink } from '@/types/memory'
 import { getClusterColor } from '@/lib/cluster-colors'
-import { useGraphAnimation, HOVER_LERP_SPEED, HOVER_SCALE } from './useGraphAnimation'
+import { useGraphAnimation, HOVER_LERP_SPEED, HOVER_SCALE, PROXIMITY_RADIUS, PROXIMITY_SCALE_MAX } from './useGraphAnimation'
 
 // ---------------------------------------------------------------------------
 // Lazy-load the 3D renderer so three.js (~600 kB) is never shipped to users
@@ -193,10 +193,26 @@ export default function ForceGraphCanvas({
       }
 
       const baseRadius = nodeRadius(node.connectionCount ?? 0)
-      const displayRadius = (baseRadius * animMultiplier) / globalScale
 
       const x = node.x ?? 0
       const y = node.y ?? 0
+
+      // -- Proximity lens: scale up nodes near the cursor ---------------------
+      let proximityMultiplier = 1.0
+      const cursor = cursorGraphPos.current
+      if (cursor && !prefersReducedMotion.current) {
+        const dx = x - cursor.x
+        const dy = y - cursor.y
+        const distSq = dx * dx + dy * dy
+        const radiusSq = PROXIMITY_RADIUS * PROXIMITY_RADIUS
+        if (distSq < radiusSq) {
+          const t = 1 - Math.sqrt(distSq) / PROXIMITY_RADIUS
+          proximityMultiplier = 1 + (PROXIMITY_SCALE_MAX - 1) * t
+          keepAlive.current = true
+        }
+      }
+
+      const displayRadius = (baseRadius * animMultiplier * proximityMultiplier) / globalScale
 
       ctx.save()
       // Stale nodes: raised from 0.3 → 0.45 for better readability
@@ -256,7 +272,7 @@ export default function ForceGraphCanvas({
         if (summary) {
           const maxChars = 28
           const label = summary.length > maxChars ? summary.slice(0, maxChars - 1) + '…' : summary
-          const fontSize = 4 / globalScale
+          const fontSize = Math.max(10, 18 / globalScale)
           ctx.font = `${fontSize}px sans-serif`
           ctx.fillStyle = 'rgba(255,255,255,0.75)'
           ctx.textAlign = 'center'
@@ -265,7 +281,7 @@ export default function ForceGraphCanvas({
         }
       }
     },
-    [focusedNodeId, hoveredNodeId, nodeAnimState, keepAlive, requestRefresh, prefersReducedMotion],
+    [focusedNodeId, hoveredNodeId, nodeAnimState, cursorGraphPos, keepAlive, requestRefresh, prefersReducedMotion],
   )
 
   // ---------------------------------------------------------------------------
@@ -312,8 +328,10 @@ export default function ForceGraphCanvas({
       const tx = targetNode.x ?? 0
       const ty = targetNode.y ?? 0
 
-      // Build a stable id from the original string ids on our domain type
-      const linkId = `${link.source}-${link.target}`
+      // Build a stable id — by the time this callback fires, the library has
+      // resolved source/target from strings to full node objects, so we read
+      // .id from the resolved objects rather than from our domain cast.
+      const linkId = `${sourceNode.id ?? ''}-${targetNode.id ?? ''}`
       const isHovered = linkId === hoveredLinkId
       const color = EDGE_COLORS[link.relation_type] ?? '#6b7280'
 
@@ -389,10 +407,14 @@ export default function ForceGraphCanvas({
   )
 
   // Keep the ref in sync so render3DNode reads the current value without
-  // needing to be re-memoized on every hover change.
+  // needing to be re-memoized on every hover change. Trigger a 3D refresh
+  // so nodeThreeObject re-evaluates the emissive state.
   useEffect(() => {
     hoveredNodeIdRef.current = hoveredNodeId
-  }, [hoveredNodeId])
+    if (viewMode === '3d') {
+      graph3dRef.current?.refresh()
+    }
+  }, [hoveredNodeId, viewMode])
 
   // ---------------------------------------------------------------------------
   // 3D node renderer — returns a THREE.Mesh for each node.
@@ -441,8 +463,10 @@ export default function ForceGraphCanvas({
         setHoveredLinkId(undefined)
         return
       }
-      const link = asGraphLink(raw)
-      setHoveredLinkId(`${link.source}-${link.target}`)
+      // Library resolves source/target to node objects — extract .id
+      const sourceId = (raw.source as unknown as { id?: string }).id ?? ''
+      const targetId = (raw.target as unknown as { id?: string }).id ?? ''
+      setHoveredLinkId(`${sourceId}-${targetId}`)
     },
     [],
   )
@@ -465,13 +489,17 @@ export default function ForceGraphCanvas({
       const screenX = e.clientX - rect.left
       const screenY = e.clientY - rect.top
       cursorGraphPos.current = graph.screen2GraphCoords(screenX, screenY)
+      // Drive re-render so proximity scaling updates as the cursor moves
+      requestRefresh()
     },
-    [graphRef, cursorGraphPos, viewMode],
+    [graphRef, cursorGraphPos, viewMode, requestRefresh],
   )
 
   const handleMouseLeave = useCallback(() => {
     cursorGraphPos.current = null
-  }, [cursorGraphPos])
+    // One final refresh so nodes restore to normal size
+    requestRefresh()
+  }, [cursorGraphPos, requestRefresh])
 
   return (
     <div

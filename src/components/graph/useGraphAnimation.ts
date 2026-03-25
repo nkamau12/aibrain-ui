@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useCallback } from 'react'
 import type { MutableRefObject } from 'react'
 import type { ForceGraphMethods } from 'react-force-graph-2d'
 
@@ -66,7 +66,9 @@ export function useGraphAnimation(
     }
   }, [])
 
-  const requestRefresh = () => {
+  // Wrapped in useCallback so the reference is stable across renders — all
+  // dependencies are refs, so the dep array is empty.
+  const requestRefresh = useCallback(() => {
     // Already running — nothing to do
     if (rafId.current !== null) return
 
@@ -85,7 +87,8 @@ export function useGraphAnimation(
     }
 
     rafId.current = requestAnimationFrame(tick)
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return { nodeAnimState, cursorGraphPos, requestRefresh, keepAlive, prefersReducedMotion }
 }
