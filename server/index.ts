@@ -4,6 +4,7 @@ import { resetTableCache } from '../../aibrain-mcp/src/db/init.js';
 import memoriesRouter from './routes/memories.js';
 import tagsRouter from './routes/tags.js';
 import statsRouter from './routes/stats.js';
+import graphRouter from './routes/graph.js';
 
 const app = express();
 const PORT = process.env.PORT ?? 3001;
@@ -23,6 +24,7 @@ app.use((_req, _res, next) => {
 app.use('/api/memories', memoriesRouter);
 app.use('/api/tags', tagsRouter);
 app.use('/api/stats', statsRouter);
+app.use('/api/graph', graphRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {
