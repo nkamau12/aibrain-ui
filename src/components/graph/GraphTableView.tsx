@@ -160,9 +160,8 @@ export function GraphTableView({ data, onNodeClick, focusedNodeId }: GraphTableV
     <div className="flex-1 overflow-auto">
       <table
         className="w-full border-collapse text-sm"
-        role="grid"
         aria-label="Memory relationship graph"
-        aria-rowcount={data.nodes.length}
+        aria-rowcount={data.nodes.length + 1}
       >
         <caption className="sr-only">
           Memory relationship graph — {data.nodes.length} node{data.nodes.length !== 1 ? 's' : ''},{' '}
@@ -252,7 +251,7 @@ function GraphTableRow({ node, rowIndex, isFocused, onNodeClick }: GraphTableRow
         'hover:bg-surface-2/60',
         'focus-visible:outline-none focus-visible:ring-inset focus-visible:ring-2 focus-visible:ring-ring',
         isFocused && 'bg-brand-cyan-950/20 ring-1 ring-inset ring-brand-cyan-500/30',
-        node.is_stale && 'opacity-50',
+        node.is_stale && !isFocused && 'opacity-50',
       )}
     >
       {/* Memory summary */}
