@@ -4,6 +4,7 @@ import ForceGraph2D from 'react-force-graph-2d'
 import type { ForceGraphMethods, NodeObject, LinkObject } from 'react-force-graph-2d'
 import type { GraphData, GraphNode, GraphLink } from '@/types/memory'
 import { getClusterColor } from '@/lib/cluster-colors'
+import { useGraphAnimation } from './useGraphAnimation'
 
 // ---------------------------------------------------------------------------
 // Lazy-load the 3D renderer so three.js (~600 kB) is never shipped to users
@@ -22,14 +23,23 @@ const EDGE_COLORS: Record<GraphLink['relation_type'], string> = {
   similar: '#6b7280',     // gray    — weak similarity signal
 }
 
+// Human-readable display labels for relation types shown in hover pills
+const RELATION_LABELS: Record<GraphLink['relation_type'], string> = {
+  supersedes: 'Supersedes',
+  'caused-by': 'Caused By',
+  'see-also': 'See Also',
+  'follow-up': 'Follow-up',
+  similar: 'Similar',
+}
+
 // Relation types that carry directional meaning and warrant arrow decoration
 const DIRECTED_TYPES = new Set<GraphLink['relation_type']>(['supersedes', 'caused-by'])
 
 // ---------------------------------------------------------------------------
 // Node sizing helpers
 // ---------------------------------------------------------------------------
-const NODE_MIN_RADIUS = 4
-const NODE_MAX_EXTRA = 16 // connectionCount * 2 capped at this
+const NODE_MIN_RADIUS = 8   // was 4 — increased for better visual presence
+const NODE_MAX_EXTRA = 28   // was 16 — connectionCount * 2 capped at this
 
 function nodeRadius(connectionCount: number): number {
   return NODE_MIN_RADIUS + Math.min(connectionCount * 2, NODE_MAX_EXTRA)
@@ -83,12 +93,16 @@ export default function ForceGraphCanvas({
   // Unparameterised ref matches the default generic of ForceGraph2D
   const graphRef = useRef<ForceGraphMethods | undefined>(undefined) as MutableRefObject<ForceGraphMethods | undefined>
 
+  const { cursorGraphPos } = useGraphAnimation(graphRef)
+
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 })
   const [hoveredNodeId, setHoveredNodeId] = useState<string | undefined>()
+  const [hoveredLinkId, setHoveredLinkId] = useState<string | undefined>()
 
   // Clear stale hover state when switching between 2D/3D modes
   useEffect(() => {
     setHoveredNodeId(undefined)
+    setHoveredLinkId(undefined)
   }, [viewMode])
 
   // Track container size with a ResizeObserver so the canvas always fills its
@@ -225,6 +239,22 @@ export default function ForceGraphCanvas({
   // via the index signature, so the cast is safe at runtime.
   const rawGraphData = data as unknown as Parameters<typeof ForceGraph2D>[0]['graphData']
 
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const graph = graphRef.current
+      if (!graph || viewMode !== '2d') return
+      const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect()
+      const screenX = e.clientX - rect.left
+      const screenY = e.clientY - rect.top
+      cursorGraphPos.current = graph.screen2GraphCoords(screenX, screenY)
+    },
+    [graphRef, cursorGraphPos, viewMode],
+  )
+
+  const handleMouseLeave = useCallback(() => {
+    cursorGraphPos.current = null
+  }, [cursorGraphPos])
+
   return (
     <div
       ref={containerRef}
@@ -232,6 +262,8 @@ export default function ForceGraphCanvas({
       role="img"
       aria-label="Memory relationship graph — use Table view for keyboard navigation"
       tabIndex={-1}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
     >
       {ready && viewMode === '2d' && (
         <ForceGraph2D
