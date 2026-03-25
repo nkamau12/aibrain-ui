@@ -3,6 +3,7 @@ import { Network } from 'lucide-react'
 import { useGraphFilters } from '@/hooks/useGraphFilters'
 import { useGraphData } from '@/hooks/useGraphData'
 import ForceGraphCanvas from '@/components/graph/ForceGraphCanvas'
+import { GraphTableView } from '@/components/graph/GraphTableView'
 
 // ---------------------------------------------------------------------------
 // BrainGraph — full-viewport scaffold
@@ -16,8 +17,7 @@ import ForceGraphCanvas from '@/components/graph/ForceGraphCanvas'
 //   │                                         │
 //   └─────────────────────────────────────────┘
 //
-// A Sheet overlay for node detail is reserved at the right edge. The graph
-// renderer (Phase 13/14) will mount into #braingraph-canvas once added.
+// A Sheet overlay for node detail is reserved at the right edge.
 //
 // The page uses `-m-6` to cancel the Shell's `p-6` padding and achieve true
 // edge-to-edge coverage. This is intentional: the graph canvas needs every
@@ -25,9 +25,6 @@ import ForceGraphCanvas from '@/components/graph/ForceGraphCanvas'
 // ---------------------------------------------------------------------------
 
 export default function BrainGraph() {
-  // setFilter and resetFilters are consumed by the FilterBar in Phase 13.
-  // Prefixed with _ to satisfy the TypeScript no-unused-vars rule while
-  // keeping them destructured here so the compiler verifies their types.
   const { filters, setFilter: _setFilter, resetFilters: _resetFilters, focusedNodeId, setFocusedNodeId } = useGraphFilters()
   const { data, isLoading, isError } = useGraphData({
     cluster: filters.cluster,
@@ -40,16 +37,10 @@ export default function BrainGraph() {
     document.title = 'Brain Graph — aiBrain'
   }, [])
 
-  // The display mode defaults to 'graph' when not specified in the URL.
   const displayMode = filters.displayMode ?? 'graph'
   const viewMode = filters.viewMode ?? '2d'
 
   return (
-    /*
-     * -m-6 counteracts the Shell's p-6 so this page bleeds to the container
-     * edges. h-[calc(100vh-3.5rem)] accounts for the 14-unit (56px) header
-     * height (h-14 in Shell → Header).
-     */
     <div className="relative -m-6 flex flex-col h-[calc(100vh-3.5rem)] bg-background overflow-hidden">
 
       {/* ── Filter bar ────────────────────────────────────────────────────── */}
@@ -59,17 +50,13 @@ export default function BrainGraph() {
           Brain Graph
         </h1>
 
-        {/* Divider */}
         <div className="w-px h-4 bg-border" aria-hidden />
 
-        {/* Placeholder: FilterBar component will mount here in a later phase */}
         <p className="text-xs text-text-muted">
-          Filter bar — coming in Phase 13
+          Filter bar — coming in assembly phase
         </p>
 
-        {/* Push mode toggles to the right */}
         <div className="ml-auto flex items-center gap-2">
-          {/* Placeholder: ViewMode / DisplayMode toggles */}
           <span className="text-xs text-text-muted">
             Mode: <span className="text-text-body">{viewMode.toUpperCase()}</span>
           </span>
@@ -82,10 +69,13 @@ export default function BrainGraph() {
       {/* ── Main content ──────────────────────────────────────────────────── */}
       <div className="relative flex flex-1 min-h-0">
 
-        {/* Graph canvas / table area — takes all remaining space */}
         <main
           id="braingraph-canvas"
-          className="flex flex-1 items-center justify-center"
+          className={
+            displayMode === 'table'
+              ? 'flex flex-col flex-1 min-h-0 overflow-hidden'
+              : 'flex flex-1 items-center justify-center'
+          }
           aria-label="Graph visualisation area"
         >
           {isLoading && (
@@ -110,7 +100,15 @@ export default function BrainGraph() {
             </div>
           )}
 
-          {!isLoading && !isError && data && (
+          {!isLoading && !isError && data && displayMode === 'table' && (
+            <GraphTableView
+              data={data}
+              onNodeClick={setFocusedNodeId}
+              focusedNodeId={focusedNodeId ?? undefined}
+            />
+          )}
+
+          {!isLoading && !isError && data && displayMode !== 'table' && (
             <>
               {data.truncated && (
                 <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 px-3 py-1 rounded-full bg-surface/90 border border-border backdrop-blur-sm">
@@ -132,15 +130,6 @@ export default function BrainGraph() {
             <p className="text-sm text-text-muted">No graph data available.</p>
           )}
         </main>
-
-        {/* Node detail Sheet — reserved slot, implemented in Phase 14 */}
-        {/*
-          <Sheet open={!!focusedNodeId} onOpenChange={(open) => { if (!open) setFocusedNodeId(undefined) }}>
-            <SheetContent side="right" className="w-[400px]">
-              ...NodeDetailPanel
-            </SheetContent>
-          </Sheet>
-        */}
       </div>
     </div>
   )
