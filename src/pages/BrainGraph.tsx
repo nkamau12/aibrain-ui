@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Network } from 'lucide-react'
 import { useGraphFilters } from '@/hooks/useGraphFilters'
 import { useGraphData } from '@/hooks/useGraphData'
+import { GraphTableView } from '@/components/graph/GraphTableView'
 
 // ---------------------------------------------------------------------------
 // BrainGraph — full-viewport scaffold
@@ -84,7 +85,11 @@ export default function BrainGraph() {
         {/* Graph canvas / table area — takes all remaining space */}
         <main
           id="braingraph-canvas"
-          className="flex flex-1 items-center justify-center"
+          className={
+            displayMode === 'table'
+              ? 'flex flex-col flex-1 min-h-0 overflow-hidden'
+              : 'flex flex-1 items-center justify-center'
+          }
           aria-label="Graph visualisation area"
         >
           {isLoading && (
@@ -109,7 +114,15 @@ export default function BrainGraph() {
             </div>
           )}
 
-          {!isLoading && !isError && data && (
+          {!isLoading && !isError && data && displayMode === 'table' && (
+            <GraphTableView
+              data={data}
+              onNodeClick={setFocusedNodeId}
+              focusedNodeId={focusedNodeId ?? undefined}
+            />
+          )}
+
+          {!isLoading && !isError && data && displayMode !== 'table' && (
             <div className="flex flex-col items-center gap-4 text-center">
               {/* Stats placeholder — gives orientation while the renderer is wired up */}
               <Network className="w-16 h-16 text-brand-cyan-500/20" aria-hidden />
