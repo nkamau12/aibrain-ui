@@ -35,6 +35,9 @@ function filtersFromParams(params: URLSearchParams): SearchFilters {
   const agent = params.get('agent')
   if (agent) filters.agentName = agent
 
+  const cluster = params.get('cluster')
+  if (cluster) filters.cluster = cluster
+
   const tags = params.getAll('tags')
   if (tags.length > 0) filters.tags = tags
 
@@ -43,6 +46,10 @@ function filtersFromParams(params: URLSearchParams): SearchFilters {
 
   const until = params.get('until')
   if (until) filters.until = until
+
+  // 'stale=1' in the URL means show stale memories. We use '1' rather than
+  // 'true' to keep URLs short when shared.
+  if (params.get('stale') === '1') filters.includeStale = true
 
   return filters
 }
@@ -53,17 +60,21 @@ function filtersToParams(filters: SearchFilters, params: URLSearchParams): URLSe
   // Always replace — clear previous values before writing new ones
   next.delete('project')
   next.delete('agent')
+  next.delete('cluster')
   next.delete('tags')
   next.delete('since')
   next.delete('until')
+  next.delete('stale')
 
   if (filters.projectPath) next.set('project', filters.projectPath)
   if (filters.agentName) next.set('agent', filters.agentName)
+  if (filters.cluster) next.set('cluster', filters.cluster)
   if (filters.tags?.length) {
     filters.tags.forEach((t) => next.append('tags', t))
   }
   if (filters.since) next.set('since', filters.since)
   if (filters.until) next.set('until', filters.until)
+  if (filters.includeStale) next.set('stale', '1')
 
   return next
 }
@@ -163,14 +174,26 @@ export default function Search() {
 
   const hasQuery = query.trim().length > 0
   const hasFilters = Boolean(
-    filters.projectPath || filters.agentName || filters.tags?.length || filters.since || filters.until,
+    filters.projectPath ||
+    filters.agentName ||
+    filters.cluster ||
+    filters.tags?.length ||
+    filters.since ||
+    filters.until ||
+    filters.includeStale,
   )
+
+  // Destructure so we can pass cluster/includeStale to the right layer.
+  // `includeStale` lives in SearchFilters (for the filter panel) but the
+  // search endpoint expects it as a top-level SearchOptions field.
+  const { includeStale, ...filterPredicates } = filters
 
   const searchResult = useSearchMemories(
     query,
     mode,
-    filters,
+    filterPredicates,
     { limit: SEARCH_FETCH_LIMIT },
+    includeStale ? { include_stale: true } : undefined,
   )
 
   const browseResult = useRecentMemories(

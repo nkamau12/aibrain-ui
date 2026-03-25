@@ -66,6 +66,7 @@ export interface StatsResponse {
   topTags: TagCount[];
   projects: Array<{ path: string; count: number }>;
   agents: Array<{ name: string; count: number }>;
+  clusters: Array<{ name: string; count: number }>;
 }
 
 export interface TimelinePoint {
