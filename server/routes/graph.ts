@@ -144,7 +144,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
         ? req.query.tags.split(',').map((t) => t.trim()).filter(Boolean)
         : [];
 
-    const includeStale = String(req.query.includeStale).toLowerCase() === 'true';
+    const includeStale = String(req.query.include_stale).toLowerCase() === 'true';
 
     const rawLimit = req.query.limit ? parseInt(String(req.query.limit), 10) : DEFAULT_LIMIT;
     const limit = Number.isNaN(rawLimit) ? DEFAULT_LIMIT : Math.min(rawLimit, MAX_LIMIT);

@@ -142,7 +142,14 @@ export function useGraphFilters(): UseGraphFiltersReturn {
   )
 
   const resetFilters = useCallback(() => {
-    setSearchParams(new URLSearchParams(), { replace: true })
+    setSearchParams((prev) => {
+      const next = new URLSearchParams()
+      // Preserve view/focus state — only clear data filters
+      if (prev.get('focus')) next.set('focus', prev.get('focus')!)
+      if (prev.get('mode')) next.set('mode', prev.get('mode')!)
+      if (prev.get('view')) next.set('view', prev.get('view')!)
+      return next
+    }, { replace: true })
   }, [setSearchParams])
 
   const setFocusedNodeId = useCallback(

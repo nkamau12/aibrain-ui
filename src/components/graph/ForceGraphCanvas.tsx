@@ -86,6 +86,11 @@ export default function ForceGraphCanvas({
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 })
   const [hoveredNodeId, setHoveredNodeId] = useState<string | undefined>()
 
+  // Clear stale hover state when switching between 2D/3D modes
+  useEffect(() => {
+    setHoveredNodeId(undefined)
+  }, [viewMode])
+
   // Track container size with a ResizeObserver so the canvas always fills its
   // parent regardless of how the layout shifts around it.
   useEffect(() => {
