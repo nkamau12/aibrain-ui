@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Network } from 'lucide-react'
 import { useGraphFilters } from '@/hooks/useGraphFilters'
 import { useGraphData } from '@/hooks/useGraphData'
+import ForceGraphCanvas from '@/components/graph/ForceGraphCanvas'
 
 // ---------------------------------------------------------------------------
 // BrainGraph — full-viewport scaffold
@@ -110,40 +111,21 @@ export default function BrainGraph() {
           )}
 
           {!isLoading && !isError && data && (
-            <div className="flex flex-col items-center gap-4 text-center">
-              {/* Stats placeholder — gives orientation while the renderer is wired up */}
-              <Network className="w-16 h-16 text-brand-cyan-500/20" aria-hidden />
-              <div className="space-y-1">
-                <p className="text-base font-semibold text-text-heading">
-                  Graph ready
-                </p>
-                <p className="text-sm text-text-muted">
-                  {data.nodes.length} node{data.nodes.length !== 1 ? 's' : ''},{' '}
-                  {data.links.length} link{data.links.length !== 1 ? 's' : ''}
-                </p>
-                {data.truncated && (
+            <>
+              {data.truncated && (
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 px-3 py-1 rounded-full bg-surface/90 border border-border backdrop-blur-sm">
                   <p className="text-xs text-brand-amber-400">
-                    Showing {data.nodes.length} of {data.totalMemories} memories —
-                    apply filters to narrow the view
+                    Showing {data.nodes.length} of {data.totalMemories} memories — apply filters to narrow the view
                   </p>
-                )}
-                {focusedNodeId && (
-                  <p className="text-xs text-brand-cyan-400">
-                    Focused: <span className="font-mono">{focusedNodeId}</span>
-                    <button
-                      type="button"
-                      onClick={() => setFocusedNodeId(undefined)}
-                      className="ml-2 underline hover:no-underline text-text-muted hover:text-text-body transition-colors"
-                    >
-                      clear
-                    </button>
-                  </p>
-                )}
-              </div>
-              <p className="text-xs text-text-muted max-w-xs">
-                The 3D/2D force-directed renderer will mount here in Phase 13.
-              </p>
-            </div>
+                </div>
+              )}
+              <ForceGraphCanvas
+                data={data}
+                viewMode={viewMode}
+                focusedNodeId={focusedNodeId}
+                onNodeClick={setFocusedNodeId}
+              />
+            </>
           )}
 
           {!isLoading && !isError && !data && (
