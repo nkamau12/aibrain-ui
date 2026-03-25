@@ -1,5 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Network } from 'lucide-react'
+import { NodeDetailSheet } from '@/components/graph/NodeDetailSheet'
 import { useGraphFilters } from '@/hooks/useGraphFilters'
 import { useGraphData } from '@/hooks/useGraphData'
 
@@ -34,6 +35,14 @@ export default function BrainGraph() {
     tags: filters.tags,
     includeStale: filters.includeStale,
   })
+
+  // Resolve the focused node from the graph dataset so the sheet has full
+  // node data without an additional API call. Returns null when the graph
+  // hasn't loaded yet or when no node is focused.
+  const focusedNode = useMemo(() => {
+    if (!focusedNodeId || !data?.nodes) return null
+    return data.nodes.find((n) => n.id === focusedNodeId) ?? null
+  }, [focusedNodeId, data?.nodes])
 
   useEffect(() => {
     document.title = 'Brain Graph — aiBrain'
@@ -151,14 +160,12 @@ export default function BrainGraph() {
           )}
         </main>
 
-        {/* Node detail Sheet — reserved slot, implemented in Phase 14 */}
-        {/*
-          <Sheet open={!!focusedNodeId} onOpenChange={(open) => { if (!open) setFocusedNodeId(undefined) }}>
-            <SheetContent side="right" className="w-[400px]">
-              ...NodeDetailPanel
-            </SheetContent>
-          </Sheet>
-        */}
+        {/* Node detail Sheet — slides in from the right when a node is focused */}
+        <NodeDetailSheet
+          node={focusedNode}
+          open={!!focusedNodeId}
+          onOpenChange={(open) => { if (!open) setFocusedNodeId(undefined) }}
+        />
       </div>
     </div>
   )
