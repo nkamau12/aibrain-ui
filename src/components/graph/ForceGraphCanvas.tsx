@@ -251,6 +251,83 @@ export default function ForceGraphCanvas({
   )
 
   // ---------------------------------------------------------------------------
+  // Link canvas painter (2D only)
+  //
+  // Replaces the default line renderer so we can control stroke width and
+  // draw a label pill on hover. The library resolves source/target to full
+  // node objects by the time this callback fires, so we cast them to access
+  // simulation x/y coordinates.
+  // ---------------------------------------------------------------------------
+  const renderLink = useCallback(
+    (raw: RawLink, ctx: CanvasRenderingContext2D, globalScale: number) => {
+      const link = asGraphLink(raw)
+      // Library resolves source/target from id strings to node objects at runtime
+      const sourceNode = raw.source as unknown as GraphNode & { x?: number; y?: number }
+      const targetNode = raw.target as unknown as GraphNode & { x?: number; y?: number }
+
+      const sx = sourceNode.x ?? 0
+      const sy = sourceNode.y ?? 0
+      const tx = targetNode.x ?? 0
+      const ty = targetNode.y ?? 0
+
+      // Build a stable id from the original string ids on our domain type
+      const linkId = `${link.source}-${link.target}`
+      const isHovered = linkId === hoveredLinkId
+      const color = EDGE_COLORS[link.relation_type] ?? '#6b7280'
+
+      ctx.save()
+
+      // Edge line — full color on hover, 60% opacity otherwise
+      ctx.beginPath()
+      ctx.moveTo(sx, sy)
+      ctx.lineTo(tx, ty)
+      ctx.strokeStyle = isHovered ? color : `${color}99`
+      ctx.lineWidth = isHovered ? 2.5 / globalScale : 2 / globalScale
+      ctx.stroke()
+
+      // Label pill at midpoint — only when hovered
+      if (isHovered) {
+        const mx = (sx + tx) / 2
+        const my = (sy + ty) / 2
+        const label = RELATION_LABELS[link.relation_type] ?? link.relation_type
+
+        const fontSize = 10 / globalScale
+        ctx.font = `600 ${fontSize}px Inter, system-ui, sans-serif`
+
+        const textWidth = ctx.measureText(label).width
+        const paddingH = 6 / globalScale
+        const paddingV = 3 / globalScale
+        const pillW = textWidth + paddingH * 2
+        const pillH = fontSize + paddingV * 2
+        const cornerRadius = 4 / globalScale
+
+        const pillX = mx - pillW / 2
+        const pillY = my - pillH / 2
+
+        // Pill background
+        ctx.beginPath()
+        ctx.roundRect(pillX, pillY, pillW, pillH, cornerRadius)
+        ctx.fillStyle = 'rgba(10,15,25,0.92)'
+        ctx.fill()
+
+        // Colored border matching the edge
+        ctx.strokeStyle = color
+        ctx.lineWidth = 1 / globalScale
+        ctx.stroke()
+
+        // Label text
+        ctx.fillStyle = '#ffffff'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText(label, mx, my)
+      }
+
+      ctx.restore()
+    },
+    [hoveredLinkId],
+  )
+
+  // ---------------------------------------------------------------------------
   // Interaction handlers
   // ---------------------------------------------------------------------------
 
@@ -265,6 +342,18 @@ export default function ForceGraphCanvas({
   const handleNodeHover = useCallback(
     (raw: RawNode | null) => {
       setHoveredNodeId(raw ? (asGraphNode(raw).id ?? undefined) : undefined)
+    },
+    [],
+  )
+
+  const handleLinkHover = useCallback(
+    (raw: RawLink | null) => {
+      if (!raw) {
+        setHoveredLinkId(undefined)
+        return
+      }
+      const link = asGraphLink(raw)
+      setHoveredLinkId(`${link.source}-${link.target}`)
     },
     [],
   )
@@ -321,11 +410,17 @@ export default function ForceGraphCanvas({
           nodeLabel={nodeLabel}
           nodeColor={nodeColor}
           linkColor={linkColor}
-          linkWidth={1}
+          linkCanvasObject={renderLink}
+          linkCanvasObjectMode={() => 'replace'}
+          linkWidth={2}
           linkDirectionalArrowLength={linkArrowLength}
           linkDirectionalArrowRelPos={1}
+          linkDirectionalParticles={2}
+          linkDirectionalParticleWidth={2}
+          linkDirectionalParticleSpeed={0.004}
           onNodeClick={handleNodeClick}
           onNodeHover={handleNodeHover}
+          onLinkHover={handleLinkHover}
         />
       )}
       {ready && viewMode === '3d' && (
@@ -343,9 +438,12 @@ export default function ForceGraphCanvas({
             nodeLabel={nodeLabel as Parameters<typeof ForceGraph3D>[0]['nodeLabel']}
             nodeColor={nodeColor as Parameters<typeof ForceGraph3D>[0]['nodeColor']}
             linkColor={linkColor as Parameters<typeof ForceGraph3D>[0]['linkColor']}
-            linkWidth={1}
+            linkWidth={2}
             linkDirectionalArrowLength={linkArrowLength as Parameters<typeof ForceGraph3D>[0]['linkDirectionalArrowLength']}
             linkDirectionalArrowRelPos={1}
+            linkDirectionalParticles={2}
+            linkDirectionalParticleWidth={2}
+            linkDirectionalParticleSpeed={0.004}
             onNodeClick={handleNodeClick as Parameters<typeof ForceGraph3D>[0]['onNodeClick']}
           />
         </Suspense>
