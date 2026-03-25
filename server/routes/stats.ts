@@ -1,28 +1,9 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { listTags } from '../../../aibrain-mcp/src/services/memory.js';
-import { getTable } from '../../../aibrain-mcp/src/db/init.js';
+import { fetchAllRows } from '../lib/db.js';
+import { toLocalDateString } from '../lib/dates.js';
 
 const router = Router();
-
-/** Format a Date as "YYYY-MM-DD" in the server's local timezone. */
-function toLocalDateString(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
-/**
- * Fetch all memory rows directly from LanceDB for aggregation.
- * We bypass getRecentMemories() because its limit cap (100) would corrupt
- * aggregate counts for users with large memory stores.
- */
-async function fetchAllRows(): Promise<Array<Record<string, unknown>>> {
-  const table = await getTable();
-  // LanceDB defaults to limit=10 without an explicit .limit() call
-  const rows = await table.query().limit(1_000_000).toArray();
-  return rows as Array<Record<string, unknown>>;
-}
 
 /**
  * GET /api/stats
