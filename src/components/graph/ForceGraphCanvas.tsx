@@ -4,6 +4,7 @@ import ForceGraph2D from 'react-force-graph-2d'
 import type { ForceGraphMethods, NodeObject, LinkObject } from 'react-force-graph-2d'
 import type { GraphData, GraphNode, GraphLink } from '@/types/memory'
 import { getClusterColor } from '@/lib/cluster-colors'
+import { useGraphAnimation, HOVER_LERP_SPEED, HOVER_SCALE } from './useGraphAnimation'
 
 // ---------------------------------------------------------------------------
 // Lazy-load the 3D renderer so three.js (~600 kB) is never shipped to users
@@ -22,14 +23,23 @@ const EDGE_COLORS: Record<GraphLink['relation_type'], string> = {
   similar: '#6b7280',     // gray    — weak similarity signal
 }
 
+// Human-readable display labels for relation types shown in hover pills
+const RELATION_LABELS: Record<GraphLink['relation_type'], string> = {
+  supersedes: 'Supersedes',
+  'caused-by': 'Caused By',
+  'see-also': 'See Also',
+  'follow-up': 'Follow-up',
+  similar: 'Similar',
+}
+
 // Relation types that carry directional meaning and warrant arrow decoration
 const DIRECTED_TYPES = new Set<GraphLink['relation_type']>(['supersedes', 'caused-by'])
 
 // ---------------------------------------------------------------------------
 // Node sizing helpers
 // ---------------------------------------------------------------------------
-const NODE_MIN_RADIUS = 4
-const NODE_MAX_EXTRA = 16 // connectionCount * 2 capped at this
+const NODE_MIN_RADIUS = 8   // was 4 — increased for better visual presence
+const NODE_MAX_EXTRA = 28   // was 16 — connectionCount * 2 capped at this
 
 function nodeRadius(connectionCount: number): number {
   return NODE_MIN_RADIUS + Math.min(connectionCount * 2, NODE_MAX_EXTRA)
@@ -83,12 +93,16 @@ export default function ForceGraphCanvas({
   // Unparameterised ref matches the default generic of ForceGraph2D
   const graphRef = useRef<ForceGraphMethods | undefined>(undefined) as MutableRefObject<ForceGraphMethods | undefined>
 
+  const { nodeAnimState, cursorGraphPos, requestRefresh, keepAlive, prefersReducedMotion } = useGraphAnimation(graphRef)
+
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 })
   const [hoveredNodeId, setHoveredNodeId] = useState<string | undefined>()
+  const [hoveredLinkId, setHoveredLinkId] = useState<string | undefined>()
 
   // Clear stale hover state when switching between 2D/3D modes
   useEffect(() => {
     setHoveredNodeId(undefined)
+    setHoveredLinkId(undefined)
   }, [viewMode])
 
   // Track container size with a ResizeObserver so the canvas always fills its
@@ -133,42 +147,118 @@ export default function ForceGraphCanvas({
   // Node canvas render (2D only)
   //
   // Each node is drawn as a filled circle using the cluster color.
-  // Focused nodes get a bright outer ring; hovered nodes scale up 1.5×.
-  // Stale nodes are drawn at reduced opacity.
+  // Hover state drives a smooth lerp on the radius multiplier stored in
+  // nodeAnimState. The glow ring uses ctx.shadow* to create a soft halo
+  // using the cluster colour. Focused nodes get a pulsing cyan outer ring
+  // (sine wave on ring radius). Stale nodes are drawn at reduced opacity
+  // (0.45) with a dashed ring so they remain identifiable. Summary labels
+  // appear when globalScale > 1.8 (user has zoomed in enough).
+  // All animations respect prefers-reduced-motion.
   // ---------------------------------------------------------------------------
   const renderNode = useCallback(
     (raw: RawNode, ctx: CanvasRenderingContext2D, globalScale: number) => {
       const node = asGraphNode(raw)
       const isFocused = node.id === focusedNodeId
       const isHovered = node.id === hoveredNodeId
+      const nodeId = node.id ?? ''
+      const clusterColor = getClusterColor(node.cluster ?? 'unclustered')
+
+      // -- Lerp the radius multiplier toward its target ----------------------
+      const target = isHovered ? HOVER_SCALE : 1.0
+      const current = nodeAnimState.current.get(nodeId) ?? 1.0
+      let animMultiplier: number
+
+      if (prefersReducedMotion.current) {
+        animMultiplier = target
+      } else {
+        animMultiplier = current + (target - current) * HOVER_LERP_SPEED
+        if (Math.abs(animMultiplier - target) < 0.005) animMultiplier = target
+      }
+
+      if (animMultiplier !== target) {
+        nodeAnimState.current.set(nodeId, animMultiplier)
+        keepAlive.current = true
+        requestRefresh()
+      } else if (animMultiplier !== 1.0) {
+        nodeAnimState.current.set(nodeId, animMultiplier)
+      } else {
+        nodeAnimState.current.delete(nodeId)
+      }
 
       const baseRadius = nodeRadius(node.connectionCount ?? 0)
-      const displayRadius = isHovered ? baseRadius * 1.5 : baseRadius
+      const displayRadius = (baseRadius * animMultiplier) / globalScale
 
       const x = node.x ?? 0
       const y = node.y ?? 0
 
       ctx.save()
-      ctx.globalAlpha = node.is_stale ? 0.3 : 1
+      // Stale nodes: raised from 0.3 → 0.45 for better readability
+      ctx.globalAlpha = node.is_stale ? 0.45 : 1
 
-      // Focused ring — rendered before the fill so it sits behind the node body
+      // -- Focused ring with sine pulse -------------------------------------
+      // The pulse expands/contracts the ring radius using sin(time). When
+      // prefers-reduced-motion is on, the ring is static (pulseOffset = 0).
       if (isFocused) {
+        const pulseOffset = prefersReducedMotion.current
+          ? 0
+          : Math.sin(performance.now() * 0.003) * (3 / globalScale)
+
+        // Signal the rAF loop to keep firing so the pulse continues animating
+        keepAlive.current = true
+        requestRefresh()
+
         ctx.beginPath()
-        ctx.arc(x, y, (displayRadius + 4) / globalScale, 0, 2 * Math.PI)
+        ctx.arc(x, y, displayRadius + (4 / globalScale) + pulseOffset, 0, 2 * Math.PI)
         ctx.strokeStyle = '#00d9ff'
         ctx.lineWidth = 2 / globalScale
         ctx.stroke()
       }
 
+      // Glow halo — applied when hovered or focused; reset in ctx.restore()
+      if (isHovered || isFocused) {
+        ctx.shadowColor = isHovered ? clusterColor : '#00d9ff'
+        ctx.shadowBlur = (isHovered ? 16 : 10) * animMultiplier
+      }
+
       // Node body
       ctx.beginPath()
-      ctx.arc(x, y, displayRadius / globalScale, 0, 2 * Math.PI)
-      ctx.fillStyle = getClusterColor(node.cluster ?? 'unclustered')
+      ctx.arc(x, y, displayRadius, 0, 2 * Math.PI)
+      ctx.fillStyle = clusterColor
       ctx.fill()
 
+      // -- Stale dashed ring ------------------------------------------------
+      // Drawn after the fill so it's always visible on top of the node body.
+      // Uses the cluster color so it reads as "same node, degraded state".
+      if (node.is_stale) {
+        ctx.setLineDash([3 / globalScale, 3 / globalScale])
+        ctx.beginPath()
+        ctx.arc(x, y, displayRadius + 2 / globalScale, 0, 2 * Math.PI)
+        ctx.strokeStyle = clusterColor
+        ctx.lineWidth = 1 / globalScale
+        ctx.stroke()
+        ctx.setLineDash([])
+      }
+
       ctx.restore()
+
+      // -- Zoom-based summary label ------------------------------------------
+      // Drawn outside save/restore so the label alpha doesn't inherit the
+      // stale dimming — labels should be fully legible regardless of staleness.
+      if (globalScale > 1.8) {
+        const summary = node.summary ?? ''
+        if (summary) {
+          const maxChars = 28
+          const label = summary.length > maxChars ? summary.slice(0, maxChars - 1) + '…' : summary
+          const fontSize = 4 / globalScale
+          ctx.font = `${fontSize}px sans-serif`
+          ctx.fillStyle = 'rgba(255,255,255,0.75)'
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'top'
+          ctx.fillText(label, x, y + displayRadius + 2 / globalScale)
+        }
+      }
     },
-    [focusedNodeId, hoveredNodeId],
+    [focusedNodeId, hoveredNodeId, nodeAnimState, keepAlive, requestRefresh, prefersReducedMotion],
   )
 
   // ---------------------------------------------------------------------------
@@ -225,6 +315,22 @@ export default function ForceGraphCanvas({
   // via the index signature, so the cast is safe at runtime.
   const rawGraphData = data as unknown as Parameters<typeof ForceGraph2D>[0]['graphData']
 
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const graph = graphRef.current
+      if (!graph || viewMode !== '2d') return
+      const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect()
+      const screenX = e.clientX - rect.left
+      const screenY = e.clientY - rect.top
+      cursorGraphPos.current = graph.screen2GraphCoords(screenX, screenY)
+    },
+    [graphRef, cursorGraphPos, viewMode],
+  )
+
+  const handleMouseLeave = useCallback(() => {
+    cursorGraphPos.current = null
+  }, [cursorGraphPos])
+
   return (
     <div
       ref={containerRef}
@@ -232,6 +338,8 @@ export default function ForceGraphCanvas({
       role="img"
       aria-label="Memory relationship graph — use Table view for keyboard navigation"
       tabIndex={-1}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
     >
       {ready && viewMode === '2d' && (
         <ForceGraph2D
