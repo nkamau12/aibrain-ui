@@ -58,6 +58,11 @@ export interface TagCount {
   count: number;
 }
 
+export interface ClusterCount {
+  name: string;
+  count: number;
+}
+
 export interface StatsResponse {
   totalMemories: number;
   memoriesThisWeek: number;
@@ -66,6 +71,8 @@ export interface StatsResponse {
   topTags: TagCount[];
   projects: Array<{ path: string; count: number }>;
   agents: Array<{ name: string; count: number }>;
+  /** Cluster distribution sorted by count descending. Memories with no cluster are grouped as "unclustered". */
+  clusters: ClusterCount[];
 }
 
 export interface TimelinePoint {

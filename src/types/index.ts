@@ -6,6 +6,7 @@ export type {
   Memory,
   MemorySearchResult,
   TagCount,
+  ClusterCount,
   StatsResponse,
   TimelinePoint,
   SearchFilters,

@@ -28,6 +28,7 @@ router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
 
     const projectCounts = new Map<string, number>();
     const agentCounts = new Map<string, number>();
+    const clusterCounts = new Map<string, number>();
     let memoriesThisWeek = 0;
 
     for (const row of rows) {
@@ -41,6 +42,11 @@ router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
 
       const agentName = (row.agentName as string | undefined) ?? '';
       agentCounts.set(agentName, (agentCounts.get(agentName) ?? 0) + 1);
+
+      // Memories without a cluster are grouped under a sentinel key so they
+      // surface in the breakdown rather than silently disappearing.
+      const cluster = (row.cluster as string | undefined)?.trim() || 'unclustered';
+      clusterCounts.set(cluster, (clusterCounts.get(cluster) ?? 0) + 1);
     }
 
     const topProjectEntry = [...projectCounts.entries()].sort((a, b) => b[1] - a[1])[0];
@@ -57,6 +63,12 @@ router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
       .sort((a, b) => b[1] - a[1])
       .map(([name, count]) => ({ name, count }));
 
+    // Clusters sorted by count descending; "unclustered" appears last when
+    // counts are tied with named clusters (the sort is stable in V8).
+    const clusters = [...clusterCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count]) => ({ name, count }));
+
     res.json({
       totalMemories: rows.length,
       memoriesThisWeek,
@@ -69,6 +81,7 @@ router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
       topTags: tagsResult.tags,
       projects,
       agents,
+      clusters,
     });
   } catch (err) {
     next(err);
