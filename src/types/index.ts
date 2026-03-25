@@ -10,4 +10,11 @@ export type {
   TimelinePoint,
   SearchFilters,
   SearchRequest,
+  // New types added for brain graph + related/stale support
+  RelatedId,
+  RelatedMemorySummary,
+  SearchOptions,
+  GraphNode,
+  GraphLink,
+  GraphData,
 } from './memory';

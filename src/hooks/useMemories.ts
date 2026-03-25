@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api'
-import type { Memory, MemorySearchResult, SearchFilters } from '@/types'
+import type { Memory, MemorySearchResult, SearchFilters, SearchOptions } from '@/types'
 
 // ---------------------------------------------------------------------------
 // Local types (not shared — specific to hook API shapes)
@@ -13,6 +13,10 @@ interface RecentMemoriesFilters {
   tags?: string[]
   since?: string
   until?: string
+  /** Restrict results to a specific cluster */
+  cluster?: string
+  /** Include superseded memories in results */
+  includeStale?: boolean
 }
 
 type SearchMode = 'hybrid' | 'fulltext' | 'vector'
@@ -34,6 +38,11 @@ interface SearchMemoriesResponse {
   searchMode: SearchMode
 }
 
+interface RelatedMemoriesResponse {
+  root: Memory | null
+  nodes: Memory[]
+}
+
 // ---------------------------------------------------------------------------
 // Query key factory — centralised so invalidations stay in sync with fetches
 // ---------------------------------------------------------------------------
@@ -41,9 +50,18 @@ interface SearchMemoriesResponse {
 export const memoryKeys = {
   all: ['memories'] as const,
   recent: (filters?: RecentMemoriesFilters) => ['memories', 'recent', filters ?? {}] as const,
-  search: (query: string, searchMode: SearchMode, filters?: SearchFilters, options?: SearchMemoriesOptions) =>
-    ['memories', 'search', query, searchMode, filters ?? {}, options ?? {}] as const,
+  search: (
+    query: string,
+    searchMode: SearchMode,
+    filters?: SearchFilters,
+    options?: SearchMemoriesOptions,
+    searchOptions?: SearchOptions,
+  ) => ['memories', 'search', query, searchMode, filters ?? {}, options ?? {}, searchOptions ?? {}] as const,
   detail: (id: string) => ['memories', id] as const,
+  related: (id: string, options?: { depth?: number; relation_types?: string[]; include_stale?: boolean; include_content?: boolean }) =>
+    ['memories', id, 'related', options ?? {}] as const,
+  graph: (filters?: { projectPath?: string; cluster?: string; tags?: string[]; includeStale?: boolean; limit?: number }) =>
+    ['graph', filters ?? {}] as const,
 }
 
 // ---------------------------------------------------------------------------
@@ -52,7 +70,8 @@ export const memoryKeys = {
 
 /**
  * Fetches recent memories, optionally filtered by projectPath, agentName,
- * tags, and limit. Re-fetches automatically when filters change.
+ * tags, cluster, and limit. Accepts `includeStale` to surface superseded
+ * memories. Re-fetches automatically when filters change.
  */
 export function useRecentMemories(filters?: RecentMemoriesFilters | undefined) {
   return useQuery<RecentMemoriesResponse>({
@@ -67,6 +86,8 @@ export function useRecentMemories(filters?: RecentMemoriesFilters | undefined) {
       }
       if (filters?.since) params.set('since', filters.since)
       if (filters?.until) params.set('until', filters.until)
+      if (filters?.cluster) params.set('cluster', filters.cluster)
+      if (filters?.includeStale) params.set('include_stale', 'true')
       const qs = params.toString()
       return apiFetch<RecentMemoriesResponse>(`/api/memories/recent${qs ? `?${qs}` : ''}`)
     },
@@ -78,6 +99,10 @@ export function useRecentMemories(filters?: RecentMemoriesFilters | undefined) {
 /**
  * Full-text / semantic / hybrid search across memories.
  *
+ * `searchOptions` controls result expansion (include_related, related_depth,
+ * include_stale) — these are independent of filter predicates and affect what
+ * data is returned rather than which memories match.
+ *
  * The query is deliberately disabled when `query` is an empty string —
  * callers should fall back to `useRecentMemories` in that case.
  */
@@ -86,13 +111,22 @@ export function useSearchMemories(
   searchMode: SearchMode = 'hybrid',
   filters?: SearchFilters,
   options?: SearchMemoriesOptions,
+  searchOptions?: SearchOptions,
 ) {
   return useQuery<SearchMemoriesResponse>({
-    queryKey: memoryKeys.search(query, searchMode, filters, options),
+    queryKey: memoryKeys.search(query, searchMode, filters, options, searchOptions),
     queryFn: () =>
       apiFetch<SearchMemoriesResponse>('/api/memories/search', {
         method: 'POST',
-        body: JSON.stringify({ query, searchMode, filters, ...options }),
+        body: JSON.stringify({
+          query,
+          searchMode,
+          filters,
+          ...options,
+          // Spread search options at the top level — the server reads them as
+          // sibling fields to `filters`, not nested inside it.
+          ...searchOptions,
+        }),
       }),
     // Only fire when there is a non-empty search term
     enabled: query.trim().length > 0,
@@ -108,6 +142,42 @@ export function useMemory(id: string | undefined) {
     queryKey: memoryKeys.detail(id ?? ''),
     queryFn: () => apiFetch<Memory>(`/api/memories/${id}`),
     enabled: Boolean(id),
+  })
+}
+
+/**
+ * Fetches the related-memory graph rooted at a given memory ID.
+ *
+ * Returns `{ root, nodes }` — `root` is the starting memory, `nodes` are
+ * the memories reachable within `depth` hops following `relation_types`.
+ * Disabled when `memoryId` is undefined.
+ */
+export function useRelatedMemories(
+  memoryId: string | undefined,
+  options?: {
+    depth?: number
+    relation_types?: string[]
+    include_stale?: boolean
+    include_content?: boolean
+  },
+) {
+  return useQuery<RelatedMemoriesResponse>({
+    queryKey: memoryKeys.related(memoryId ?? '', options),
+    queryFn: () => {
+      const params = new URLSearchParams()
+      if (options?.depth != null) params.set('depth', String(options.depth))
+      if (options?.relation_types?.length) {
+        // Server expects a comma-separated string
+        params.set('relation_types', options.relation_types.join(','))
+      }
+      if (options?.include_stale) params.set('include_stale', 'true')
+      if (options?.include_content) params.set('include_content', 'true')
+      const qs = params.toString()
+      return apiFetch<RelatedMemoriesResponse>(
+        `/api/memories/${memoryId}/related${qs ? `?${qs}` : ''}`,
+      )
+    },
+    enabled: Boolean(memoryId),
   })
 }
 
