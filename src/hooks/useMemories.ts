@@ -82,7 +82,7 @@ export function useRecentMemories(filters?: RecentMemoriesFilters | undefined) {
       if (filters?.projectPath) params.set('projectPath', filters.projectPath)
       if (filters?.agentName) params.set('agentName', filters.agentName)
       if (filters?.tags?.length) {
-        filters.tags.forEach((tag) => params.append('tags', tag))
+        params.set('tags', filters.tags.join(','))
       }
       if (filters?.since) params.set('since', filters.since)
       if (filters?.until) params.set('until', filters.until)

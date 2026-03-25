@@ -268,16 +268,12 @@ function RelatedMemoriesSection({ memoryId }: RelatedMemoriesSectionProps) {
 
   const nodes = data?.nodes ?? []
 
-  // Group related memories by their relation type relative to the root.
-  // The API returns flat nodes; we recover the relation_type by looking at
-  // the root's related_ids. Nodes not referenced there are labelled "similar".
-  const rootRelatedIds = data?.root?.related_ids ?? []
-  const relatedIdMap = new Map(rootRelatedIds.map((r) => [r.id, r.relation_type]))
-
-  // Group nodes by relation type
+  // Group nodes by relation type. The API returns relation_type on each node
+  // directly — use it instead of reconstructing from root.related_ids (which
+  // only covers depth-1 nodes and mislabels depth-2+ as 'similar').
   const grouped = new Map<string, Memory[]>()
   for (const node of nodes) {
-    const relationType = relatedIdMap.get(node.id) ?? 'similar'
+    const relationType = (node as any).relation_type ?? 'similar'
     const existing = grouped.get(relationType) ?? []
     grouped.set(relationType, [...existing, node])
   }

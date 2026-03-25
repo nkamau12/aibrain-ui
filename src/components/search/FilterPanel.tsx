@@ -28,7 +28,7 @@ export function FilterPanel({ filters, onFiltersChange }: FilterPanelProps) {
   const { data: statsData } = useStats()
   const availableProjects = statsData?.projects ?? []
   const availableAgents = statsData?.agents ?? []
-  const availableClusters = statsData?.clusters ?? []
+  const availableClusters = (statsData?.clusters ?? []).filter(c => c.name !== 'unclustered')
 
   const activeFilterCount = countActiveFilters(filters)
 

@@ -68,6 +68,10 @@ const GRAPH_COLUMNS = [
 
 function parseTags(raw: unknown): string[] {
   if (Array.isArray(raw)) return raw as string[];
+  // Arrow List/Vector objects are iterable but not plain arrays
+  if (raw != null && typeof (raw as any)[Symbol.iterator] === 'function') {
+    return Array.from(raw as Iterable<string>);
+  }
   if (typeof raw === 'string') {
     try {
       const parsed = JSON.parse(raw);
@@ -81,6 +85,10 @@ function parseTags(raw: unknown): string[] {
 
 function parseRelatedIds(raw: unknown): RelatedIdEntry[] {
   if (Array.isArray(raw)) return raw as RelatedIdEntry[];
+  // Arrow List/Vector objects are iterable but not plain arrays
+  if (raw != null && typeof (raw as any)[Symbol.iterator] === 'function') {
+    return Array.from(raw as Iterable<RelatedIdEntry>);
+  }
   if (typeof raw === 'string') {
     try {
       const parsed = JSON.parse(raw);
