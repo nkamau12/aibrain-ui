@@ -14,12 +14,14 @@ const router = Router();
  * GET /api/memories/recent
  *
  * Query params:
- *   limit        - max results (default 20, capped at 100 by service)
- *   projectPath  - filter by project
- *   agentName    - filter by agent
- *   tags         - comma-separated tag list
- *   since        - ISO 8601 date lower bound
- *   until        - ISO 8601 date upper bound
+ *   limit         - max results (default 20, capped at 100 by service)
+ *   projectPath   - filter by project
+ *   agentName     - filter by agent
+ *   tags          - comma-separated tag list
+ *   since         - ISO 8601 date lower bound
+ *   until         - ISO 8601 date upper bound
+ *   cluster       - filter by cluster name
+ *   include_stale - include stale (superseded) memories ("true" / "1" = yes)
  */
 router.get('/recent', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -31,6 +33,11 @@ router.get('/recent', async (req: Request, res: Response, next: NextFunction) =>
     if (req.query.tags) filters.tags = String(req.query.tags).split(',').filter(Boolean);
     if (req.query.since) filters.since = String(req.query.since);
     if (req.query.until) filters.until = String(req.query.until);
+    if (req.query.cluster) filters.cluster = String(req.query.cluster);
+    if (req.query.include_stale !== undefined) {
+      const raw = String(req.query.include_stale);
+      filters.include_stale = raw === 'true' || raw === '1';
+    }
 
     const result = await getRecentMemories(limit, Object.keys(filters).length ? filters : undefined);
     res.json(result);
@@ -42,10 +49,22 @@ router.get('/recent', async (req: Request, res: Response, next: NextFunction) =>
 /**
  * POST /api/memories/search
  *
- * Body: { query, limit?, searchMode?, rrfK?, filters?, includeContent?, contentMaxLength? }
+ * Body:
+ *   query            - required search string
+ *   limit?           - max results
+ *   searchMode?      - "hybrid" | "fulltext" | "vector"
+ *   rrfK?            - RRF k parameter
+ *   filters?         - { agentName, sessionId, projectPath, tags, since, until, cluster }
+ *   includeContent?  - include full content in results
+ *   contentMaxLength? - truncate content at this length
+ *   include_related? - attach related memories to each result (BFS by ID)
+ *   related_depth?   - BFS hop depth (1 or 2)
+ *   include_stale?   - include stale (superseded) memories in results
  *
  * The frontend sends includeContent and contentMaxLength at the top level.
  * searchMemories() expects them nested under resultOptions. We map them here.
+ * include_related, related_depth, and include_stale are top-level SearchOptions
+ * fields (not filter fields) and are passed through directly.
  */
 router.post('/search', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -57,6 +76,9 @@ router.post('/search', async (req: Request, res: Response, next: NextFunction) =
       filters,
       includeContent,
       contentMaxLength,
+      include_related,
+      related_depth,
+      include_stale,
     } = req.body as {
       query: string;
       limit?: number;
@@ -65,6 +87,9 @@ router.post('/search', async (req: Request, res: Response, next: NextFunction) =
       filters?: MemoryFilters;
       includeContent?: boolean;
       contentMaxLength?: number;
+      include_related?: boolean;
+      related_depth?: number;
+      include_stale?: boolean;
     };
 
     if (!query || typeof query !== 'string') {
@@ -82,6 +107,9 @@ router.post('/search', async (req: Request, res: Response, next: NextFunction) =
         includeContent,
         contentMaxLength,
       },
+      include_related,
+      related_depth,
+      include_stale,
     });
 
     res.json(result);
