@@ -95,6 +95,10 @@ export default function ForceGraphCanvas({
 
   const { nodeAnimState, cursorGraphPos, requestRefresh, keepAlive, prefersReducedMotion } = useGraphAnimation(graphRef)
 
+  // When a node is focused, the pulse animation needs the rAF loop to keep
+  // running even after hover lerps have settled. This ref signals that.
+  const focusPulseActive = useRef(false)
+
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 })
   const [hoveredNodeId, setHoveredNodeId] = useState<string | undefined>()
   const [hoveredLinkId, setHoveredLinkId] = useState<string | undefined>()
