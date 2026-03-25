@@ -68,10 +68,8 @@ const GRAPH_COLUMNS = [
 
 function parseTags(raw: unknown): string[] {
   if (Array.isArray(raw)) return raw as string[];
-  // Arrow List/Vector objects are iterable but not plain arrays
-  if (raw != null && typeof (raw as any)[Symbol.iterator] === 'function') {
-    return Array.from(raw as Iterable<string>);
-  }
+  // Check string BEFORE iterable — strings are iterable in JS and
+  // Array.from("json") splits into individual characters instead of parsing.
   if (typeof raw === 'string') {
     try {
       const parsed = JSON.parse(raw);
@@ -79,16 +77,18 @@ function parseTags(raw: unknown): string[] {
     } catch {
       return [];
     }
+  }
+  // Arrow List/Vector objects are iterable but not plain arrays
+  if (raw != null && typeof (raw as any)[Symbol.iterator] === 'function') {
+    return Array.from(raw as Iterable<string>);
   }
   return [];
 }
 
 function parseRelatedIds(raw: unknown): RelatedIdEntry[] {
   if (Array.isArray(raw)) return raw as RelatedIdEntry[];
-  // Arrow List/Vector objects are iterable but not plain arrays
-  if (raw != null && typeof (raw as any)[Symbol.iterator] === 'function') {
-    return Array.from(raw as Iterable<RelatedIdEntry>);
-  }
+  // Check string BEFORE iterable — strings are iterable in JS and
+  // Array.from("json") splits into individual characters instead of parsing.
   if (typeof raw === 'string') {
     try {
       const parsed = JSON.parse(raw);
@@ -96,6 +96,10 @@ function parseRelatedIds(raw: unknown): RelatedIdEntry[] {
     } catch {
       return [];
     }
+  }
+  // Arrow List/Vector objects are iterable but not plain arrays
+  if (raw != null && typeof (raw as any)[Symbol.iterator] === 'function') {
+    return Array.from(raw as Iterable<RelatedIdEntry>);
   }
   return [];
 }
