@@ -4,6 +4,7 @@ import { Check } from 'lucide-react'
 import { Card, CardContent, CardFooter } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { getClusterColor } from '@/lib/cluster-colors'
 import type { MemorySearchResult } from '@/types'
 
 // ---------------------------------------------------------------------------
@@ -136,6 +137,7 @@ export function SearchResultCard({
         'hover:translate-y-[-1px] hover:shadow-lg hover:shadow-black/30',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         isSelected && selectionMode && 'ring-2 ring-brand-cyan-500/40 bg-brand-cyan-950/10',
+        result.is_stale && 'opacity-50',
       )}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
@@ -210,6 +212,18 @@ export function SearchResultCard({
           </span>
         ) : (
           <span className="text-xs text-text-muted italic">no project</span>
+        )}
+        {result.cluster && (
+          <span className="flex shrink-0 items-center gap-1 overflow-hidden">
+            <span
+              className="size-[7px] shrink-0 rounded-full"
+              style={{ backgroundColor: getClusterColor(result.cluster) }}
+              aria-hidden="true"
+            />
+            <span className="truncate text-xs text-text-muted max-w-[120px]" title={result.cluster}>
+              {result.cluster}
+            </span>
+          </span>
         )}
         <span className="shrink-0 text-xs text-text-muted">{relativeTime}</span>
       </CardFooter>

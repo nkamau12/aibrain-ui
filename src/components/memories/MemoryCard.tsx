@@ -2,6 +2,8 @@ import { useNavigate } from 'react-router-dom'
 import { formatDistanceToNow } from 'date-fns'
 import { Card, CardContent, CardFooter } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
+import { getClusterColor } from '@/lib/cluster-colors'
 import type { Memory } from '@/types'
 
 interface MemoryCardProps {
@@ -42,13 +44,14 @@ export function MemoryCard({ memory }: MemoryCardProps) {
 
   return (
     <Card
-      className="
-        cursor-pointer bg-surface border-border/60
-        transition-all duration-200
-        hover:border-border hover:ring-1 hover:ring-brand-cyan-500/30
-        hover:translate-y-[-1px] hover:shadow-lg hover:shadow-black/30
-        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
-      "
+      className={cn(
+        'cursor-pointer bg-surface border-border/60',
+        'transition-all duration-200',
+        'hover:border-border hover:ring-1 hover:ring-brand-cyan-500/30',
+        'hover:translate-y-[-1px] hover:shadow-lg hover:shadow-black/30',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        memory.is_stale && 'opacity-50',
+      )}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
       tabIndex={0}
@@ -83,7 +86,7 @@ export function MemoryCard({ memory }: MemoryCardProps) {
         </CardContent>
       )}
 
-      {/* Footer: project path + relative timestamp */}
+      {/* Footer: project path · cluster · relative timestamp */}
       <CardFooter className="justify-between gap-3 bg-transparent border-t border-border/40 px-4 py-2.5">
         {shortProject ? (
           <span
@@ -94,6 +97,18 @@ export function MemoryCard({ memory }: MemoryCardProps) {
           </span>
         ) : (
           <span className="text-xs text-text-muted italic">no project</span>
+        )}
+        {memory.cluster && (
+          <span className="flex shrink-0 items-center gap-1 overflow-hidden">
+            <span
+              className="size-[7px] shrink-0 rounded-full"
+              style={{ backgroundColor: getClusterColor(memory.cluster) }}
+              aria-hidden="true"
+            />
+            <span className="truncate text-xs text-text-muted max-w-[120px]" title={memory.cluster}>
+              {memory.cluster}
+            </span>
+          </span>
         )}
         <span className="shrink-0 text-xs text-text-muted">{relativeTime}</span>
       </CardFooter>
