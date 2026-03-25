@@ -2,8 +2,11 @@ import { useRef, useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import type { MutableRefObject } from 'react'
 import ForceGraph2D from 'react-force-graph-2d'
 import type { ForceGraphMethods, NodeObject, LinkObject } from 'react-force-graph-2d'
+import type { ForceGraphMethods as ForceGraph3DMethods } from 'react-force-graph-3d'
+import * as THREE from 'three'
 import type { GraphData, GraphNode, GraphLink } from '@/types/memory'
 import { getClusterColor } from '@/lib/cluster-colors'
+import { useGraphAnimation } from './useGraphAnimation'
 
 // ---------------------------------------------------------------------------
 // Lazy-load the 3D renderer so three.js (~600 kB) is never shipped to users
@@ -22,14 +25,23 @@ const EDGE_COLORS: Record<GraphLink['relation_type'], string> = {
   similar: '#6b7280',     // gray    — weak similarity signal
 }
 
+// Human-readable display labels for relation types shown in hover pills
+const RELATION_LABELS: Record<GraphLink['relation_type'], string> = {
+  supersedes: 'Supersedes',
+  'caused-by': 'Caused By',
+  'see-also': 'See Also',
+  'follow-up': 'Follow-up',
+  similar: 'Similar',
+}
+
 // Relation types that carry directional meaning and warrant arrow decoration
 const DIRECTED_TYPES = new Set<GraphLink['relation_type']>(['supersedes', 'caused-by'])
 
 // ---------------------------------------------------------------------------
 // Node sizing helpers
 // ---------------------------------------------------------------------------
-const NODE_MIN_RADIUS = 4
-const NODE_MAX_EXTRA = 16 // connectionCount * 2 capped at this
+const NODE_MIN_RADIUS = 8   // was 4 — increased for better visual presence
+const NODE_MAX_EXTRA = 28   // was 16 — connectionCount * 2 capped at this
 
 function nodeRadius(connectionCount: number): number {
   return NODE_MIN_RADIUS + Math.min(connectionCount * 2, NODE_MAX_EXTRA)
@@ -82,13 +94,22 @@ export default function ForceGraphCanvas({
   const containerRef = useRef<HTMLDivElement>(null)
   // Unparameterised ref matches the default generic of ForceGraph2D
   const graphRef = useRef<ForceGraphMethods | undefined>(undefined) as MutableRefObject<ForceGraphMethods | undefined>
+  // 3D graph instance — typed separately since ForceGraph3DMethods differs from 2D
+  const graph3dRef = useRef<ForceGraph3DMethods | undefined>(undefined) as MutableRefObject<ForceGraph3DMethods | undefined>
+  // Ref mirror of hoveredNodeId — prevents stale closure in render3DNode without
+  // forcing it to re-memoize on every hover change (which would recreate all meshes)
+  const hoveredNodeIdRef = useRef<string | undefined>(undefined)
+
+  const { cursorGraphPos } = useGraphAnimation(graphRef)
 
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 })
   const [hoveredNodeId, setHoveredNodeId] = useState<string | undefined>()
+  const [hoveredLinkId, setHoveredLinkId] = useState<string | undefined>()
 
   // Clear stale hover state when switching between 2D/3D modes
   useEffect(() => {
     setHoveredNodeId(undefined)
+    setHoveredLinkId(undefined)
   }, [viewMode])
 
   // Track container size with a ResizeObserver so the canvas always fills its
@@ -214,6 +235,66 @@ export default function ForceGraphCanvas({
     [],
   )
 
+  // Keep the ref in sync so render3DNode reads the current value without
+  // needing to be re-memoized on every hover change.
+  useEffect(() => {
+    hoveredNodeIdRef.current = hoveredNodeId
+  }, [hoveredNodeId])
+
+  // ---------------------------------------------------------------------------
+  // 3D node renderer — returns a THREE.Mesh for each node.
+  //
+  // Called by react-force-graph-3d once per node per render frame when the
+  // node's state changes. We create a new mesh each call so the library owns
+  // the object lifecycle; THREE.js handles disposal via its internal GC.
+  //
+  // Radius is the 2D canvas unit value scaled to THREE world units (×0.5).
+  // Hub nodes (high connectionCount) get larger spheres than leaf nodes.
+  // Hovered nodes scale 1.5× and gain an emissive glow on the cluster color.
+  // Stale nodes render at reduced opacity.
+  // ---------------------------------------------------------------------------
+  const render3DNode = useCallback(
+    (raw: RawNode): THREE.Object3D => {
+      const node = asGraphNode(raw)
+      const isHovered = node.id === hoveredNodeIdRef.current
+      const clusterColor = getClusterColor(node.cluster ?? 'unclustered')
+
+      const radius = nodeRadius(node.connectionCount ?? 0) * 0.5
+      const geometry = new THREE.SphereGeometry(isHovered ? radius * 1.5 : radius, 16, 12)
+
+      const material = new THREE.MeshLambertMaterial({
+        color: new THREE.Color(clusterColor),
+        transparent: true,
+        opacity: node.is_stale ? 0.45 : 0.9,
+      })
+
+      if (isHovered) {
+        material.emissive = new THREE.Color(clusterColor)
+        material.emissiveIntensity = 0.3
+      }
+
+      return new THREE.Mesh(geometry, material)
+    },
+    // Intentionally stable — reads hoveredNodeIdRef.current at call time.
+    // Re-creating this callback would force the library to rebuild all meshes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  )
+
+  // ---------------------------------------------------------------------------
+  // Fog setup — fires once after the 3D physics engine finishes its warmup.
+  // FogExp2 creates an exponential density that makes distant nodes fade into
+  // the dark background (0x0a0f19), giving a natural depth-of-field feel.
+  // ---------------------------------------------------------------------------
+  const handle3DEngineStop = useCallback(() => {
+    const graph = graph3dRef.current
+    if (!graph) return
+    const scene = graph.scene()
+    if (scene && !scene.fog) {
+      scene.fog = new THREE.FogExp2(0x0a0f19, 0.008)
+    }
+  }, [])
+
   // ---------------------------------------------------------------------------
   // The library needs explicit width/height. Defer render until the container
   // has been measured to avoid the library initialising at size 0.
@@ -225,6 +306,22 @@ export default function ForceGraphCanvas({
   // via the index signature, so the cast is safe at runtime.
   const rawGraphData = data as unknown as Parameters<typeof ForceGraph2D>[0]['graphData']
 
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const graph = graphRef.current
+      if (!graph || viewMode !== '2d') return
+      const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect()
+      const screenX = e.clientX - rect.left
+      const screenY = e.clientY - rect.top
+      cursorGraphPos.current = graph.screen2GraphCoords(screenX, screenY)
+    },
+    [graphRef, cursorGraphPos, viewMode],
+  )
+
+  const handleMouseLeave = useCallback(() => {
+    cursorGraphPos.current = null
+  }, [cursorGraphPos])
+
   return (
     <div
       ref={containerRef}
@@ -232,6 +329,8 @@ export default function ForceGraphCanvas({
       role="img"
       aria-label="Memory relationship graph — use Table view for keyboard navigation"
       tabIndex={-1}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
     >
       {ready && viewMode === '2d' && (
         <ForceGraph2D
@@ -258,6 +357,7 @@ export default function ForceGraphCanvas({
       {ready && viewMode === '3d' && (
         <Suspense fallback={null}>
           <ForceGraph3D
+            ref={graph3dRef as Parameters<typeof ForceGraph3D>[0]['ref']}
             graphData={data as unknown as Parameters<typeof ForceGraph3D>[0]['graphData']}
             width={dimensions.width}
             height={dimensions.height}
@@ -266,14 +366,18 @@ export default function ForceGraphCanvas({
             cooldownTicks={200}
             cooldownTime={5000}
             showNavInfo={false}
-            nodeOpacity={0.9}
             nodeLabel={nodeLabel as Parameters<typeof ForceGraph3D>[0]['nodeLabel']}
-            nodeColor={nodeColor as Parameters<typeof ForceGraph3D>[0]['nodeColor']}
+            nodeThreeObject={render3DNode as Parameters<typeof ForceGraph3D>[0]['nodeThreeObject']}
+            nodeThreeObjectExtend={false}
             linkColor={linkColor as Parameters<typeof ForceGraph3D>[0]['linkColor']}
-            linkWidth={1}
+            linkWidth={2}
             linkDirectionalArrowLength={linkArrowLength as Parameters<typeof ForceGraph3D>[0]['linkDirectionalArrowLength']}
             linkDirectionalArrowRelPos={1}
+            linkDirectionalParticles={2}
+            linkDirectionalParticleWidth={1.5}
             onNodeClick={handleNodeClick as Parameters<typeof ForceGraph3D>[0]['onNodeClick']}
+            onNodeHover={handleNodeHover as Parameters<typeof ForceGraph3D>[0]['onNodeHover']}
+            onEngineStop={handle3DEngineStop}
           />
         </Suspense>
       )}
