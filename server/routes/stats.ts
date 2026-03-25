@@ -43,10 +43,8 @@ router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
       const agentName = (row.agentName as string | undefined) ?? '';
       agentCounts.set(agentName, (agentCounts.get(agentName) ?? 0) + 1);
 
-      const cluster = (row.cluster as string | undefined) ?? '';
-      if (cluster) {
-        clusterCounts.set(cluster, (clusterCounts.get(cluster) ?? 0) + 1);
-      }
+      const cluster = (row.cluster as string | undefined)?.trim() || 'unclustered';
+      clusterCounts.set(cluster, (clusterCounts.get(cluster) ?? 0) + 1);
     }
 
     const topProjectEntry = [...projectCounts.entries()].sort((a, b) => b[1] - a[1])[0];

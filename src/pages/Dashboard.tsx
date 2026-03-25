@@ -5,6 +5,7 @@ import { MemoryList } from '@/components/memories/MemoryList'
 import { StatsCards } from '@/components/dashboard/StatsCards'
 import { TagCloud } from '@/components/dashboard/TagCloud'
 import { Timeline } from '@/components/dashboard/Timeline'
+import { ClusterBreakdown } from '@/components/dashboard/ClusterBreakdown'
 
 export default function Dashboard() {
   const { data, isLoading, isError } = useRecentMemories({ limit: 12 })
@@ -28,33 +29,38 @@ export default function Dashboard() {
       {/* Timeline chart — full width */}
       <Timeline />
 
-      {/* Two-column layout: recent memories (wider) + tag cloud (narrower) */}
+      {/* Two-column layout: cluster breakdown (wider) + tag cloud (narrower) */}
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
         <section className="lg:col-span-2">
-          <h2 className="mb-4 text-base font-medium text-text-heading">
-            Recent Memories
-          </h2>
-
-          {isError ? (
-            <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              Failed to load memories. Check that the API server is running on
-              port 3001.
-            </div>
-          ) : isLoading ? (
-            <MemoryList isLoading={true} skeletonCount={12} />
-          ) : (
-            <MemoryList memories={data?.memories ?? []} />
-          )}
-
-          <Link to="/search" className="text-xs text-brand-cyan-400 hover:underline mt-2 inline-block">
-            View all memories →
-          </Link>
+          <ClusterBreakdown />
         </section>
 
         <aside>
           <TagCloud />
         </aside>
       </div>
+
+      {/* Recent memories — full width below the charts row */}
+      <section>
+        <h2 className="mb-4 text-base font-medium text-text-heading">
+          Recent Memories
+        </h2>
+
+        {isError ? (
+          <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            Failed to load memories. Check that the API server is running on
+            port 3001.
+          </div>
+        ) : isLoading ? (
+          <MemoryList isLoading={true} skeletonCount={12} />
+        ) : (
+          <MemoryList memories={data?.memories ?? []} />
+        )}
+
+        <Link to="/search" className="text-xs text-brand-cyan-400 hover:underline mt-2 inline-block">
+          View all memories →
+        </Link>
+      </section>
     </div>
   )
 }
