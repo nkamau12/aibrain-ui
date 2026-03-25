@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { format } from 'date-fns'
-import { Trash2, ArrowLeft, AlertCircle, Bot, Hash, FolderOpen, Calendar } from 'lucide-react'
+import { useNavigate, Link } from 'react-router-dom'
+import { format, formatDistanceToNow } from 'date-fns'
+import { Trash2, ArrowLeft, AlertCircle, Bot, Hash, FolderOpen, Calendar, Layers } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
@@ -17,8 +17,27 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { useDeleteMemory } from '@/hooks/useMemories'
+import { useDeleteMemory, useRelatedMemories } from '@/hooks/useMemories'
+import { getClusterColor } from '@/lib/cluster-colors'
 import type { Memory } from '@/types'
+
+// ---------------------------------------------------------------------------
+// Relation type helpers
+// ---------------------------------------------------------------------------
+
+const RELATION_TYPE_LABELS: Record<string, string> = {
+  supersedes: 'Supersedes',
+  'caused-by': 'Caused by',
+  'see-also': 'See also',
+  'follow-up': 'Follow-up',
+  similar: 'Similar',
+}
+
+const RELATION_TYPE_ORDER = ['supersedes', 'caused-by', 'follow-up', 'see-also', 'similar']
+
+function getRelationLabel(relationType: string): string {
+  return RELATION_TYPE_LABELS[relationType] ?? relationType
+}
 
 // ---------------------------------------------------------------------------
 // Skeleton
@@ -174,6 +193,164 @@ function MetaItem({ icon, label, value, mono = false }: MetaItemProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Cluster meta item — icon + color dot + name
+// ---------------------------------------------------------------------------
+
+interface ClusterMetaItemProps {
+  cluster: string
+}
+
+function ClusterMetaItem({ cluster }: ClusterMetaItemProps) {
+  const color = getClusterColor(cluster)
+  return (
+    <div className="flex items-center gap-1.5 text-xs text-text-muted min-w-0">
+      <span className="shrink-0 text-text-muted/70">
+        <Layers className="size-3.5" />
+      </span>
+      <span className="sr-only">Cluster:</span>
+      <span
+        className="shrink-0 size-2 rounded-full"
+        style={{ backgroundColor: color }}
+        aria-hidden="true"
+      />
+      <span className="truncate" title={cluster}>
+        {cluster}
+      </span>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Stale badge
+// ---------------------------------------------------------------------------
+
+function StaleBadge() {
+  return (
+    <Badge
+      className="
+        bg-amber-900/50 text-amber-300
+        border border-amber-700/50
+        cursor-default text-xs font-medium
+      "
+    >
+      Stale
+    </Badge>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Related memories section
+// ---------------------------------------------------------------------------
+
+interface RelatedMemoriesSectionProps {
+  memoryId: string
+}
+
+function RelatedMemoriesSkeletons() {
+  return (
+    <div className="space-y-2">
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="border-l-2 border-border/60 pl-3 py-1 space-y-1.5">
+          <Skeleton className="h-3.5 w-20" />
+          <Skeleton className="h-4 w-4/5" />
+          <Skeleton className="h-3 w-24" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function RelatedMemoriesSection({ memoryId }: RelatedMemoriesSectionProps) {
+  const { data, isLoading } = useRelatedMemories(memoryId, {
+    depth: 2,
+    include_content: false,
+  })
+
+  const nodes = data?.nodes ?? []
+
+  // Group related memories by their relation type relative to the root.
+  // The API returns flat nodes; we recover the relation_type by looking at
+  // the root's related_ids. Nodes not referenced there are labelled "similar".
+  const rootRelatedIds = data?.root?.related_ids ?? []
+  const relatedIdMap = new Map(rootRelatedIds.map((r) => [r.id, r.relation_type]))
+
+  // Group nodes by relation type
+  const grouped = new Map<string, Memory[]>()
+  for (const node of nodes) {
+    const relationType = relatedIdMap.get(node.id) ?? 'similar'
+    const existing = grouped.get(relationType) ?? []
+    grouped.set(relationType, [...existing, node])
+  }
+
+  return (
+    <section aria-labelledby="related-memories-heading" className="mt-10 pt-6 border-t border-border/40">
+      <h2
+        id="related-memories-heading"
+        className="text-sm font-semibold text-text-heading mb-4"
+      >
+        Related Memories
+      </h2>
+
+      {isLoading && <RelatedMemoriesSkeletons />}
+
+      {!isLoading && nodes.length === 0 && (
+        <p className="text-sm text-text-muted italic">No related memories.</p>
+      )}
+
+      {!isLoading && nodes.length > 0 && (
+        <div className="space-y-5">
+          {RELATION_TYPE_ORDER.filter((rt) => grouped.has(rt)).map((relationType) => (
+            <div key={relationType}>
+              <p className="text-xs font-medium text-text-muted mb-2">
+                {getRelationLabel(relationType)}
+              </p>
+              <div className="space-y-1.5">
+                {(grouped.get(relationType) ?? []).map((node) => (
+                  <RelatedMemoryRow key={node.id} memory={node} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+interface RelatedMemoryRowProps {
+  memory: Memory
+}
+
+function RelatedMemoryRow({ memory }: RelatedMemoryRowProps) {
+  const relativeTime = (() => {
+    try {
+      return formatDistanceToNow(new Date(memory.createdAt), { addSuffix: true })
+    } catch {
+      return memory.createdAt
+    }
+  })()
+
+  return (
+    <Link
+      to={`/memory/${memory.id}`}
+      className="
+        block border-l-2 border-border/60 pl-3 py-1.5
+        rounded-r-sm
+        hover:border-border hover:bg-surface/50
+        transition-colors duration-150
+        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
+        group
+      "
+    >
+      <p className="text-sm text-text-body leading-snug line-clamp-2 group-hover:text-text-heading transition-colors">
+        {memory.summary}
+      </p>
+      <p className="mt-0.5 text-xs text-text-muted">{relativeTime}</p>
+    </Link>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
@@ -183,7 +360,8 @@ interface MemoryDetailProps {
 
 /**
  * Renders the full detail view for a single memory: markdown content,
- * metadata, tags, and delete with confirmation.
+ * metadata (including cluster), stale badge, tags, related memories, and
+ * delete with confirmation.
  *
  * Intentionally a pure presentational component — the page that mounts it
  * is responsible for data fetching via useMemory(id).
@@ -248,11 +426,12 @@ export function MemoryDetail({ memory }: MemoryDetailProps) {
           </Button>
         </div>
 
-        {/* Summary / title */}
-        <header className="mb-6">
-          <h1 className="text-xl font-semibold text-text-heading leading-snug">
+        {/* Summary / title + stale badge */}
+        <header className="mb-6 flex flex-wrap items-start gap-3">
+          <h1 className="flex-1 text-xl font-semibold text-text-heading leading-snug">
             {memory.summary}
           </h1>
+          {memory.is_stale && <StaleBadge />}
         </header>
 
         {/* Metadata row */}
@@ -270,6 +449,7 @@ export function MemoryDetail({ memory }: MemoryDetailProps) {
             label="Created"
             value={formattedDate}
           />
+          {memory.cluster && <ClusterMetaItem cluster={memory.cluster} />}
         </div>
 
         {/* Tags */}
@@ -304,6 +484,9 @@ export function MemoryDetail({ memory }: MemoryDetailProps) {
         ) : (
           <p className="text-sm text-text-muted italic">No content available.</p>
         )}
+
+        {/* Related memories */}
+        <RelatedMemoriesSection memoryId={memory.id} />
       </div>
 
       <DeleteConfirmDialog
