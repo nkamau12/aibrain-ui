@@ -1,13 +1,14 @@
 import { useEffect, useMemo } from 'react'
-import { Network } from 'lucide-react'
-import { NodeDetailSheet } from '@/components/graph/NodeDetailSheet'
 import { useGraphFilters } from '@/hooks/useGraphFilters'
 import { useGraphData } from '@/hooks/useGraphData'
 import ForceGraphCanvas from '@/components/graph/ForceGraphCanvas'
 import { GraphTableView } from '@/components/graph/GraphTableView'
+import { NodeDetailSheet } from '@/components/graph/NodeDetailSheet'
+import { GraphFilterBar } from '@/components/graph/GraphFilterBar'
+import { GraphLegend } from '@/components/graph/GraphLegend'
 
 // ---------------------------------------------------------------------------
-// BrainGraph — full-viewport scaffold
+// BrainGraph — full-viewport page
 //
 // Layout model:
 //   ┌─────────────────────────────────────────┐
@@ -15,10 +16,10 @@ import { GraphTableView } from '@/components/graph/GraphTableView'
 //   ├─────────────────────────────────────────┤
 //   │                                         │
 //   │  Main content — graph canvas or table   │ ← fills remaining height
-//   │                                         │
+//   │                      ┌──────────────┐   │
+//   │                      │  Legend      │   │ ← bottom-right overlay
+//   │                      └──────────────┘   │
 //   └─────────────────────────────────────────┘
-//
-// A Sheet overlay for node detail is reserved at the right edge.
 //
 // The page uses `-m-6` to cancel the Shell's `p-6` padding and achieve true
 // edge-to-edge coverage. This is intentional: the graph canvas needs every
@@ -26,7 +27,7 @@ import { GraphTableView } from '@/components/graph/GraphTableView'
 // ---------------------------------------------------------------------------
 
 export default function BrainGraph() {
-  const { filters, setFilter: _setFilter, resetFilters: _resetFilters, focusedNodeId, setFocusedNodeId } = useGraphFilters()
+  const { filters, setFilter, resetFilters, focusedNodeId, setFocusedNodeId } = useGraphFilters()
   const { data, isLoading, isError } = useGraphData({
     cluster: filters.cluster,
     projectPath: filters.projectPath,
@@ -35,12 +36,21 @@ export default function BrainGraph() {
   })
 
   // Resolve the focused node from the graph dataset so the sheet has full
-  // node data without an additional API call. Returns null when the graph
-  // hasn't loaded yet or when no node is focused.
+  // node data without an additional API call.
   const focusedNode = useMemo(() => {
     if (!focusedNodeId || !data?.nodes) return null
     return data.nodes.find((n) => n.id === focusedNodeId) ?? null
   }, [focusedNodeId, data?.nodes])
+
+  // Derive unique cluster names present in the current graph data for the legend.
+  const presentClusters = useMemo(() => {
+    if (!data?.nodes) return []
+    const seen = new Set<string>()
+    for (const node of data.nodes) {
+      if (node.cluster) seen.add(node.cluster)
+    }
+    return Array.from(seen).sort()
+  }, [data?.nodes])
 
   useEffect(() => {
     document.title = 'Brain Graph — aiBrain'
@@ -52,28 +62,16 @@ export default function BrainGraph() {
   return (
     <div className="relative -m-6 flex flex-col h-[calc(100vh-3.5rem)] bg-background overflow-hidden">
 
-      {/* ── Filter bar ────────────────────────────────────────────────────── */}
-      <header className="flex items-center gap-3 px-4 h-12 shrink-0 border-b border-border bg-surface/80 backdrop-blur-sm">
-        <Network className="w-4 h-4 text-brand-cyan-500 shrink-0" aria-hidden />
-        <h1 className="text-sm font-semibold text-text-heading tracking-tight">
-          Brain Graph
-        </h1>
-
-        <div className="w-px h-4 bg-border" aria-hidden />
-
-        <p className="text-xs text-text-muted">
-          Filter bar — coming in assembly phase
-        </p>
-
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-xs text-text-muted">
-            Mode: <span className="text-text-body">{viewMode.toUpperCase()}</span>
-          </span>
-          <span className="text-xs text-text-muted">
-            View: <span className="text-text-body capitalize">{displayMode}</span>
-          </span>
-        </div>
-      </header>
+      {/* ── Filter bar ──────────────────────────────────────────────────── */}
+      <GraphFilterBar
+        filters={filters}
+        onFilterChange={(key, value) => setFilter(key as keyof typeof filters, value as never)}
+        onReset={resetFilters}
+        nodeCount={data?.nodes.length ?? 0}
+        linkCount={data?.links.length ?? 0}
+        truncated={data?.truncated ?? false}
+        totalMemories={data?.totalMemories ?? 0}
+      />
 
       {/* ── Main content ──────────────────────────────────────────────────── */}
       <div className="relative flex flex-1 min-h-0">
@@ -139,6 +137,11 @@ export default function BrainGraph() {
             <p className="text-sm text-text-muted">No graph data available.</p>
           )}
         </main>
+
+        {/* ── Legend overlay ──────────────────────────────────────────── */}
+        {!isLoading && !isError && data && displayMode !== 'table' && (
+          <GraphLegend clusters={presentClusters} />
+        )}
 
         {/* Node detail Sheet — slides in from the right when a node is focused */}
         <NodeDetailSheet
