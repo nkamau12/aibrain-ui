@@ -4,6 +4,7 @@ import ForceGraph2D from 'react-force-graph-2d'
 import type { ForceGraphMethods, NodeObject, LinkObject } from 'react-force-graph-2d'
 import type { GraphData, GraphNode, GraphLink } from '@/types/memory'
 import { getClusterColor } from '@/lib/cluster-colors'
+import { useGraphAnimation, HOVER_LERP_SPEED, HOVER_SCALE } from './useGraphAnimation'
 
 // ---------------------------------------------------------------------------
 // Lazy-load the 3D renderer so three.js (~600 kB) is never shipped to users
@@ -22,14 +23,23 @@ const EDGE_COLORS: Record<GraphLink['relation_type'], string> = {
   similar: '#6b7280',     // gray    — weak similarity signal
 }
 
+// Human-readable display labels for relation types shown in hover pills
+const RELATION_LABELS: Record<GraphLink['relation_type'], string> = {
+  supersedes: 'Supersedes',
+  'caused-by': 'Caused By',
+  'see-also': 'See Also',
+  'follow-up': 'Follow-up',
+  similar: 'Similar',
+}
+
 // Relation types that carry directional meaning and warrant arrow decoration
 const DIRECTED_TYPES = new Set<GraphLink['relation_type']>(['supersedes', 'caused-by'])
 
 // ---------------------------------------------------------------------------
 // Node sizing helpers
 // ---------------------------------------------------------------------------
-const NODE_MIN_RADIUS = 4
-const NODE_MAX_EXTRA = 16 // connectionCount * 2 capped at this
+const NODE_MIN_RADIUS = 8   // was 4 — increased for better visual presence
+const NODE_MAX_EXTRA = 28   // was 16 — connectionCount * 2 capped at this
 
 function nodeRadius(connectionCount: number): number {
   return NODE_MIN_RADIUS + Math.min(connectionCount * 2, NODE_MAX_EXTRA)
@@ -83,12 +93,16 @@ export default function ForceGraphCanvas({
   // Unparameterised ref matches the default generic of ForceGraph2D
   const graphRef = useRef<ForceGraphMethods | undefined>(undefined) as MutableRefObject<ForceGraphMethods | undefined>
 
+  const { nodeAnimState, cursorGraphPos, requestRefresh, keepAlive, prefersReducedMotion } = useGraphAnimation(graphRef)
+
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 })
   const [hoveredNodeId, setHoveredNodeId] = useState<string | undefined>()
+  const [hoveredLinkId, setHoveredLinkId] = useState<string | undefined>()
 
   // Clear stale hover state when switching between 2D/3D modes
   useEffect(() => {
     setHoveredNodeId(undefined)
+    setHoveredLinkId(undefined)
   }, [viewMode])
 
   // Track container size with a ResizeObserver so the canvas always fills its
@@ -133,7 +147,9 @@ export default function ForceGraphCanvas({
   // Node canvas render (2D only)
   //
   // Each node is drawn as a filled circle using the cluster color.
-  // Focused nodes get a bright outer ring; hovered nodes scale up 1.5×.
+  // Hover state drives a smooth lerp on the radius multiplier stored in
+  // nodeAnimState. The glow ring uses ctx.shadow* to create a soft halo
+  // using the cluster colour. Focused nodes get an additional cyan outer ring.
   // Stale nodes are drawn at reduced opacity.
   // ---------------------------------------------------------------------------
   const renderNode = useCallback(
@@ -141,9 +157,38 @@ export default function ForceGraphCanvas({
       const node = asGraphNode(raw)
       const isFocused = node.id === focusedNodeId
       const isHovered = node.id === hoveredNodeId
+      const nodeId = node.id ?? ''
+      const clusterColor = getClusterColor(node.cluster ?? 'unclustered')
+
+      // -- Lerp the radius multiplier toward its target ----------------------
+      const target = isHovered ? HOVER_SCALE : 1.0
+      const current = nodeAnimState.current.get(nodeId) ?? 1.0
+      let animMultiplier: number
+
+      if (prefersReducedMotion.current) {
+        // Snap immediately — no animation
+        animMultiplier = target
+      } else {
+        animMultiplier = current + (target - current) * HOVER_LERP_SPEED
+        // Snap when close enough to avoid infinite micro-steps
+        if (Math.abs(animMultiplier - target) < 0.005) animMultiplier = target
+      }
+
+      // Persist the animated value and signal the rAF loop if still moving
+      if (animMultiplier !== target) {
+        nodeAnimState.current.set(nodeId, animMultiplier)
+        keepAlive.current = true
+        requestRefresh()
+      } else if (animMultiplier !== 1.0) {
+        // At a non-resting stable target (e.g. HOVER_SCALE) — keep the entry
+        nodeAnimState.current.set(nodeId, animMultiplier)
+      } else {
+        // Fully at rest — remove to keep the map lean
+        nodeAnimState.current.delete(nodeId)
+      }
 
       const baseRadius = nodeRadius(node.connectionCount ?? 0)
-      const displayRadius = isHovered ? baseRadius * 1.5 : baseRadius
+      const displayRadius = (baseRadius * animMultiplier) / globalScale
 
       const x = node.x ?? 0
       const y = node.y ?? 0
@@ -154,21 +199,31 @@ export default function ForceGraphCanvas({
       // Focused ring — rendered before the fill so it sits behind the node body
       if (isFocused) {
         ctx.beginPath()
-        ctx.arc(x, y, (displayRadius + 4) / globalScale, 0, 2 * Math.PI)
+        ctx.arc(x, y, displayRadius + 4 / globalScale, 0, 2 * Math.PI)
         ctx.strokeStyle = '#00d9ff'
         ctx.lineWidth = 2 / globalScale
         ctx.stroke()
       }
 
+      // Glow effect — applied only when hovered or focused so idle nodes are
+      // drawn without shadow overhead. The shadow is reset in ctx.restore().
+      if (isHovered || isFocused) {
+        ctx.shadowColor = isHovered ? clusterColor : '#00d9ff'
+        ctx.shadowBlur = (isHovered ? 16 : 10) * animMultiplier
+      }
+
       // Node body
       ctx.beginPath()
-      ctx.arc(x, y, displayRadius / globalScale, 0, 2 * Math.PI)
-      ctx.fillStyle = getClusterColor(node.cluster ?? 'unclustered')
+      ctx.arc(x, y, displayRadius, 0, 2 * Math.PI)
+      ctx.fillStyle = clusterColor
       ctx.fill()
 
       ctx.restore()
     },
-    [focusedNodeId, hoveredNodeId],
+    // hoveredNodeId drives the lerp target; focusedNodeId drives the ring.
+    // The animation refs (nodeAnimState, keepAlive, requestRefresh,
+    // prefersReducedMotion) are stable refs — no need to list them.
+    [focusedNodeId, hoveredNodeId, nodeAnimState, keepAlive, requestRefresh, prefersReducedMotion],
   )
 
   // ---------------------------------------------------------------------------
@@ -196,6 +251,83 @@ export default function ForceGraphCanvas({
   )
 
   // ---------------------------------------------------------------------------
+  // Link canvas painter (2D only)
+  //
+  // Replaces the default line renderer so we can control stroke width and
+  // draw a label pill on hover. The library resolves source/target to full
+  // node objects by the time this callback fires, so we cast them to access
+  // simulation x/y coordinates.
+  // ---------------------------------------------------------------------------
+  const renderLink = useCallback(
+    (raw: RawLink, ctx: CanvasRenderingContext2D, globalScale: number) => {
+      const link = asGraphLink(raw)
+      // Library resolves source/target from id strings to node objects at runtime
+      const sourceNode = raw.source as unknown as GraphNode & { x?: number; y?: number }
+      const targetNode = raw.target as unknown as GraphNode & { x?: number; y?: number }
+
+      const sx = sourceNode.x ?? 0
+      const sy = sourceNode.y ?? 0
+      const tx = targetNode.x ?? 0
+      const ty = targetNode.y ?? 0
+
+      // Build a stable id from the original string ids on our domain type
+      const linkId = `${link.source}-${link.target}`
+      const isHovered = linkId === hoveredLinkId
+      const color = EDGE_COLORS[link.relation_type] ?? '#6b7280'
+
+      ctx.save()
+
+      // Edge line — full color on hover, 60% opacity otherwise
+      ctx.beginPath()
+      ctx.moveTo(sx, sy)
+      ctx.lineTo(tx, ty)
+      ctx.strokeStyle = isHovered ? color : `${color}99`
+      ctx.lineWidth = isHovered ? 2.5 / globalScale : 2 / globalScale
+      ctx.stroke()
+
+      // Label pill at midpoint — only when hovered
+      if (isHovered) {
+        const mx = (sx + tx) / 2
+        const my = (sy + ty) / 2
+        const label = RELATION_LABELS[link.relation_type] ?? link.relation_type
+
+        const fontSize = 10 / globalScale
+        ctx.font = `600 ${fontSize}px Inter, system-ui, sans-serif`
+
+        const textWidth = ctx.measureText(label).width
+        const paddingH = 6 / globalScale
+        const paddingV = 3 / globalScale
+        const pillW = textWidth + paddingH * 2
+        const pillH = fontSize + paddingV * 2
+        const cornerRadius = 4 / globalScale
+
+        const pillX = mx - pillW / 2
+        const pillY = my - pillH / 2
+
+        // Pill background
+        ctx.beginPath()
+        ctx.roundRect(pillX, pillY, pillW, pillH, cornerRadius)
+        ctx.fillStyle = 'rgba(10,15,25,0.92)'
+        ctx.fill()
+
+        // Colored border matching the edge
+        ctx.strokeStyle = color
+        ctx.lineWidth = 1 / globalScale
+        ctx.stroke()
+
+        // Label text
+        ctx.fillStyle = '#ffffff'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText(label, mx, my)
+      }
+
+      ctx.restore()
+    },
+    [hoveredLinkId],
+  )
+
+  // ---------------------------------------------------------------------------
   // Interaction handlers
   // ---------------------------------------------------------------------------
 
@@ -214,6 +346,18 @@ export default function ForceGraphCanvas({
     [],
   )
 
+  const handleLinkHover = useCallback(
+    (raw: RawLink | null) => {
+      if (!raw) {
+        setHoveredLinkId(undefined)
+        return
+      }
+      const link = asGraphLink(raw)
+      setHoveredLinkId(`${link.source}-${link.target}`)
+    },
+    [],
+  )
+
   // ---------------------------------------------------------------------------
   // The library needs explicit width/height. Defer render until the container
   // has been measured to avoid the library initialising at size 0.
@@ -225,6 +369,22 @@ export default function ForceGraphCanvas({
   // via the index signature, so the cast is safe at runtime.
   const rawGraphData = data as unknown as Parameters<typeof ForceGraph2D>[0]['graphData']
 
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const graph = graphRef.current
+      if (!graph || viewMode !== '2d') return
+      const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect()
+      const screenX = e.clientX - rect.left
+      const screenY = e.clientY - rect.top
+      cursorGraphPos.current = graph.screen2GraphCoords(screenX, screenY)
+    },
+    [graphRef, cursorGraphPos, viewMode],
+  )
+
+  const handleMouseLeave = useCallback(() => {
+    cursorGraphPos.current = null
+  }, [cursorGraphPos])
+
   return (
     <div
       ref={containerRef}
@@ -232,6 +392,8 @@ export default function ForceGraphCanvas({
       role="img"
       aria-label="Memory relationship graph — use Table view for keyboard navigation"
       tabIndex={-1}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
     >
       {ready && viewMode === '2d' && (
         <ForceGraph2D
@@ -248,11 +410,17 @@ export default function ForceGraphCanvas({
           nodeLabel={nodeLabel}
           nodeColor={nodeColor}
           linkColor={linkColor}
-          linkWidth={1}
+          linkCanvasObject={renderLink}
+          linkCanvasObjectMode={() => 'replace'}
+          linkWidth={2}
           linkDirectionalArrowLength={linkArrowLength}
           linkDirectionalArrowRelPos={1}
+          linkDirectionalParticles={2}
+          linkDirectionalParticleWidth={2}
+          linkDirectionalParticleSpeed={0.004}
           onNodeClick={handleNodeClick}
           onNodeHover={handleNodeHover}
+          onLinkHover={handleLinkHover}
         />
       )}
       {ready && viewMode === '3d' && (
@@ -270,9 +438,12 @@ export default function ForceGraphCanvas({
             nodeLabel={nodeLabel as Parameters<typeof ForceGraph3D>[0]['nodeLabel']}
             nodeColor={nodeColor as Parameters<typeof ForceGraph3D>[0]['nodeColor']}
             linkColor={linkColor as Parameters<typeof ForceGraph3D>[0]['linkColor']}
-            linkWidth={1}
+            linkWidth={2}
             linkDirectionalArrowLength={linkArrowLength as Parameters<typeof ForceGraph3D>[0]['linkDirectionalArrowLength']}
             linkDirectionalArrowRelPos={1}
+            linkDirectionalParticles={2}
+            linkDirectionalParticleWidth={2}
+            linkDirectionalParticleSpeed={0.004}
             onNodeClick={handleNodeClick as Parameters<typeof ForceGraph3D>[0]['onNodeClick']}
           />
         </Suspense>
