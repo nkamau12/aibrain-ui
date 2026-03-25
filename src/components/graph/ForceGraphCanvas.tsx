@@ -258,6 +258,83 @@ export default function ForceGraphCanvas({
   )
 
   // ---------------------------------------------------------------------------
+  // Link canvas painter (2D only)
+  //
+  // Replaces the default line renderer so we can control stroke width and
+  // draw a label pill on hover. The library resolves source/target to full
+  // node objects by the time this callback fires, so we cast them to access
+  // simulation x/y coordinates.
+  // ---------------------------------------------------------------------------
+  const renderLink = useCallback(
+    (raw: RawLink, ctx: CanvasRenderingContext2D, globalScale: number) => {
+      const link = asGraphLink(raw)
+      // Library resolves source/target from id strings to node objects at runtime
+      const sourceNode = raw.source as unknown as GraphNode & { x?: number; y?: number }
+      const targetNode = raw.target as unknown as GraphNode & { x?: number; y?: number }
+
+      const sx = sourceNode.x ?? 0
+      const sy = sourceNode.y ?? 0
+      const tx = targetNode.x ?? 0
+      const ty = targetNode.y ?? 0
+
+      // Build a stable id from the original string ids on our domain type
+      const linkId = `${link.source}-${link.target}`
+      const isHovered = linkId === hoveredLinkId
+      const color = EDGE_COLORS[link.relation_type] ?? '#6b7280'
+
+      ctx.save()
+
+      // Edge line — full color on hover, 60% opacity otherwise
+      ctx.beginPath()
+      ctx.moveTo(sx, sy)
+      ctx.lineTo(tx, ty)
+      ctx.strokeStyle = isHovered ? color : `${color}99`
+      ctx.lineWidth = isHovered ? 2.5 / globalScale : 2 / globalScale
+      ctx.stroke()
+
+      // Label pill at midpoint — only when hovered
+      if (isHovered) {
+        const mx = (sx + tx) / 2
+        const my = (sy + ty) / 2
+        const label = RELATION_LABELS[link.relation_type] ?? link.relation_type
+
+        const fontSize = 10 / globalScale
+        ctx.font = `600 ${fontSize}px Inter, system-ui, sans-serif`
+
+        const textWidth = ctx.measureText(label).width
+        const paddingH = 6 / globalScale
+        const paddingV = 3 / globalScale
+        const pillW = textWidth + paddingH * 2
+        const pillH = fontSize + paddingV * 2
+        const cornerRadius = 4 / globalScale
+
+        const pillX = mx - pillW / 2
+        const pillY = my - pillH / 2
+
+        // Pill background
+        ctx.beginPath()
+        ctx.roundRect(pillX, pillY, pillW, pillH, cornerRadius)
+        ctx.fillStyle = 'rgba(10,15,25,0.92)'
+        ctx.fill()
+
+        // Colored border matching the edge
+        ctx.strokeStyle = color
+        ctx.lineWidth = 1 / globalScale
+        ctx.stroke()
+
+        // Label text
+        ctx.fillStyle = '#ffffff'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText(label, mx, my)
+      }
+
+      ctx.restore()
+    },
+    [hoveredLinkId],
+  )
+
+  // ---------------------------------------------------------------------------
   // Interaction handlers
   // ---------------------------------------------------------------------------
 
@@ -284,15 +361,6 @@ export default function ForceGraphCanvas({
 
   // ---------------------------------------------------------------------------
   // 3D node renderer — returns a THREE.Mesh for each node.
-  //
-  // Called by react-force-graph-3d once per node per render frame when the
-  // node's state changes. We create a new mesh each call so the library owns
-  // the object lifecycle; THREE.js handles disposal via its internal GC.
-  //
-  // Radius is the 2D canvas unit value scaled to THREE world units (×0.5).
-  // Hub nodes (high connectionCount) get larger spheres than leaf nodes.
-  // Hovered nodes scale 1.5× and gain an emissive glow on the cluster color.
-  // Stale nodes render at reduced opacity.
   // ---------------------------------------------------------------------------
   const render3DNode = useCallback(
     (raw: RawNode): THREE.Object3D => {
@@ -316,16 +384,12 @@ export default function ForceGraphCanvas({
 
       return new THREE.Mesh(geometry, material)
     },
-    // Intentionally stable — reads hoveredNodeIdRef.current at call time.
-    // Re-creating this callback would force the library to rebuild all meshes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   )
 
   // ---------------------------------------------------------------------------
   // Fog setup — fires once after the 3D physics engine finishes its warmup.
-  // FogExp2 creates an exponential density that makes distant nodes fade into
-  // the dark background (0x0a0f19), giving a natural depth-of-field feel.
   // ---------------------------------------------------------------------------
   const handle3DEngineStop = useCallback(() => {
     const graph = graph3dRef.current
@@ -336,6 +400,17 @@ export default function ForceGraphCanvas({
     }
   }, [])
 
+  const handleLinkHover = useCallback(
+    (raw: RawLink | null) => {
+      if (!raw) {
+        setHoveredLinkId(undefined)
+        return
+      }
+      const link = asGraphLink(raw)
+      setHoveredLinkId(`${link.source}-${link.target}`)
+    },
+    [],
+  )
   // ---------------------------------------------------------------------------
   // The library needs explicit width/height. Defer render until the container
   // has been measured to avoid the library initialising at size 0.
@@ -388,11 +463,17 @@ export default function ForceGraphCanvas({
           nodeLabel={nodeLabel}
           nodeColor={nodeColor}
           linkColor={linkColor}
-          linkWidth={1}
+          linkCanvasObject={renderLink}
+          linkCanvasObjectMode={() => 'replace'}
+          linkWidth={2}
           linkDirectionalArrowLength={linkArrowLength}
           linkDirectionalArrowRelPos={1}
+          linkDirectionalParticles={2}
+          linkDirectionalParticleWidth={2}
+          linkDirectionalParticleSpeed={0.004}
           onNodeClick={handleNodeClick}
           onNodeHover={handleNodeHover}
+          onLinkHover={handleLinkHover}
         />
       )}
       {ready && viewMode === '3d' && (
@@ -415,7 +496,8 @@ export default function ForceGraphCanvas({
             linkDirectionalArrowLength={linkArrowLength as Parameters<typeof ForceGraph3D>[0]['linkDirectionalArrowLength']}
             linkDirectionalArrowRelPos={1}
             linkDirectionalParticles={2}
-            linkDirectionalParticleWidth={1.5}
+            linkDirectionalParticleWidth={2}
+            linkDirectionalParticleSpeed={0.004}
             onNodeClick={handleNodeClick as Parameters<typeof ForceGraph3D>[0]['onNodeClick']}
             onNodeHover={handleNodeHover as Parameters<typeof ForceGraph3D>[0]['onNodeHover']}
             onEngineStop={handle3DEngineStop}
