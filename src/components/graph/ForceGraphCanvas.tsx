@@ -96,9 +96,7 @@ export default function ForceGraphCanvas({
   const graphRef = useRef<ForceGraphMethods | undefined>(undefined) as MutableRefObject<ForceGraphMethods | undefined>
   // 3D graph instance — typed separately since ForceGraph3DMethods differs from 2D
   const graph3dRef = useRef<ForceGraph3DMethods | undefined>(undefined) as MutableRefObject<ForceGraph3DMethods | undefined>
-  // Ref mirror of hoveredNodeId — prevents stale closure in render3DNode without
-  // forcing it to re-memoize on every hover change (which would recreate all meshes)
-  const hoveredNodeIdRef = useRef<string | undefined>(undefined)
+
 
   const { nodeAnimState, cursorGraphPos, requestRefresh, keepAlive, prefersReducedMotion } = useGraphAnimation(graphRef)
 
@@ -212,7 +210,7 @@ export default function ForceGraphCanvas({
         }
       }
 
-      const displayRadius = (baseRadius * animMultiplier * proximityMultiplier) / globalScale
+      const displayRadius = baseRadius * animMultiplier * proximityMultiplier
 
       ctx.save()
       // Stale nodes: raised from 0.3 → 0.45 for better readability
@@ -331,7 +329,7 @@ export default function ForceGraphCanvas({
       // Build a stable id — by the time this callback fires, the library has
       // resolved source/target from strings to full node objects, so we read
       // .id from the resolved objects rather than from our domain cast.
-      const linkId = `${sourceNode.id ?? ''}-${targetNode.id ?? ''}`
+      const linkId = `${sourceNode.id ?? ''}-${targetNode.id ?? ''}-${link.relation_type}`
       const isHovered = linkId === hoveredLinkId
       const color = EDGE_COLORS[link.relation_type] ?? '#6b7280'
 
@@ -406,42 +404,58 @@ export default function ForceGraphCanvas({
     [],
   )
 
-  // Keep the ref in sync so render3DNode reads the current value without
-  // needing to be re-memoized on every hover change. Trigger a 3D refresh
-  // so nodeThreeObject re-evaluates the emissive state.
+  // Mutate existing Three.js meshes in place on hover change. Calling
+  // graph3dRef.refresh() would reheat the d3 simulation and rebuild all
+  // GPU geometry — instead we reach into node.__threeObj directly.
   useEffect(() => {
-    hoveredNodeIdRef.current = hoveredNodeId
-    if (viewMode === '3d') {
-      graph3dRef.current?.refresh()
-    }
-  }, [hoveredNodeId, viewMode])
+    if (viewMode !== '3d') return
+
+    data.nodes.forEach((node) => {
+      const threeObj = (node as unknown as { __threeObj?: THREE.Mesh }).__threeObj
+      if (!threeObj || !(threeObj instanceof THREE.Mesh)) return
+
+      const isHovered = node.id === hoveredNodeId
+      const clusterColor = getClusterColor(node.cluster ?? 'unclustered')
+      const baseRadius = nodeRadius(node.connectionCount ?? 0) * 0.5
+      const targetRadius = isHovered ? baseRadius * 1.5 : baseRadius
+
+      // Only replace geometry if the radius actually needs to change
+      const currentRadius = (threeObj.geometry as THREE.SphereGeometry).parameters?.radius
+      if (currentRadius !== targetRadius) {
+        threeObj.geometry.dispose()
+        threeObj.geometry = new THREE.SphereGeometry(targetRadius, 16, 12)
+      }
+
+      // Mutate material emissive in place — no material recreation needed
+      const mat = threeObj.material as THREE.MeshLambertMaterial
+      if (isHovered) {
+        mat.emissive = new THREE.Color(clusterColor)
+        mat.emissiveIntensity = 0.3
+      } else {
+        mat.emissive = new THREE.Color(0x000000)
+        mat.emissiveIntensity = 0
+      }
+      mat.needsUpdate = true
+    })
+  }, [hoveredNodeId, viewMode, data.nodes])
 
   // ---------------------------------------------------------------------------
-  // 3D node renderer — returns a THREE.Mesh for each node.
+  // 3D node renderer — returns a THREE.Mesh for each node (initial state only).
+  // Hover effects are handled by direct mesh mutation above.
   // ---------------------------------------------------------------------------
   const render3DNode = useCallback(
     (raw: RawNode): THREE.Object3D => {
       const node = asGraphNode(raw)
-      const isHovered = node.id === hoveredNodeIdRef.current
       const clusterColor = getClusterColor(node.cluster ?? 'unclustered')
-
       const radius = nodeRadius(node.connectionCount ?? 0) * 0.5
-      const geometry = new THREE.SphereGeometry(isHovered ? radius * 1.5 : radius, 16, 12)
-
+      const geometry = new THREE.SphereGeometry(radius, 16, 12)
       const material = new THREE.MeshLambertMaterial({
         color: new THREE.Color(clusterColor),
         transparent: true,
         opacity: node.is_stale ? 0.45 : 0.9,
       })
-
-      if (isHovered) {
-        material.emissive = new THREE.Color(clusterColor)
-        material.emissiveIntensity = 0.3
-      }
-
       return new THREE.Mesh(geometry, material)
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   )
 
@@ -466,7 +480,8 @@ export default function ForceGraphCanvas({
       // Library resolves source/target to node objects — extract .id
       const sourceId = (raw.source as unknown as { id?: string }).id ?? ''
       const targetId = (raw.target as unknown as { id?: string }).id ?? ''
-      setHoveredLinkId(`${sourceId}-${targetId}`)
+      const relationType = asGraphLink(raw).relation_type
+      setHoveredLinkId(`${sourceId}-${targetId}-${relationType}`)
     },
     [],
   )
