@@ -14,6 +14,7 @@ const Dashboard = lazy(() => import('@/pages/Dashboard'))
 const Search = lazy(() => import('@/pages/Search'))
 const Tags = lazy(() => import('@/pages/Tags'))
 const MemoryDetail = lazy(() => import('@/pages/MemoryDetail'))
+const BrainGraph = lazy(() => import('@/pages/BrainGraph'))
 
 /**
  * Minimal full-page loading indicator shown by Suspense while a page chunk is
@@ -39,6 +40,7 @@ function PageLoader() {
  *   /                → Dashboard
  *   /search          → Search
  *   /tags            → Tags
+ *   /graph           → BrainGraph
  *   /memory/:id      → MemoryDetail
  *
  * All routes are wrapped in Shell, which provides the sidebar and header.
@@ -78,6 +80,16 @@ export default function App() {
               <ErrorBoundary>
                 <Suspense fallback={<PageLoader />}>
                   <Tags />
+                </Suspense>
+              </ErrorBoundary>
+            }
+          />
+          <Route
+            path="graph"
+            element={
+              <ErrorBoundary>
+                <Suspense fallback={<PageLoader />}>
+                  <BrainGraph />
                 </Suspense>
               </ErrorBoundary>
             }

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { NavLink } from 'react-router-dom'
-import { Brain, LayoutDashboard, Search, Tags, X } from 'lucide-react'
+import { Brain, LayoutDashboard, Network, Search, Tags, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface NavItem {
@@ -12,6 +12,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/search', icon: Search, label: 'Search' },
+  { to: '/graph', icon: Network, label: 'Brain Graph' },
   { to: '/tags', icon: Tags, label: 'Tags' },
 ]
 
