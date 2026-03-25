@@ -28,6 +28,7 @@ router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
 
     const projectCounts = new Map<string, number>();
     const agentCounts = new Map<string, number>();
+    const clusterCounts = new Map<string, number>();
     let memoriesThisWeek = 0;
 
     for (const row of rows) {
@@ -41,12 +42,17 @@ router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
 
       const agentName = (row.agentName as string | undefined) ?? '';
       agentCounts.set(agentName, (agentCounts.get(agentName) ?? 0) + 1);
+
+      const cluster = (row.cluster as string | undefined) ?? '';
+      if (cluster) {
+        clusterCounts.set(cluster, (clusterCounts.get(cluster) ?? 0) + 1);
+      }
     }
 
     const topProjectEntry = [...projectCounts.entries()].sort((a, b) => b[1] - a[1])[0];
     const topAgentEntry = [...agentCounts.entries()].sort((a, b) => b[1] - a[1])[0];
 
-    // All distinct projects and agents, sorted by count descending
+    // All distinct projects, agents, and clusters, sorted by count descending
     const projects = [...projectCounts.entries()]
       .filter(([path]) => path !== '')
       .sort((a, b) => b[1] - a[1])
@@ -54,6 +60,10 @@ router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
 
     const agents = [...agentCounts.entries()]
       .filter(([name]) => name !== '')
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count]) => ({ name, count }));
+
+    const clusters = [...clusterCounts.entries()]
       .sort((a, b) => b[1] - a[1])
       .map(([name, count]) => ({ name, count }));
 
@@ -69,6 +79,7 @@ router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
       topTags: tagsResult.tags,
       projects,
       agents,
+      clusters,
     });
   } catch (err) {
     next(err);

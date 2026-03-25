@@ -28,6 +28,7 @@ export function FilterPanel({ filters, onFiltersChange }: FilterPanelProps) {
   const { data: statsData } = useStats()
   const availableProjects = statsData?.projects ?? []
   const availableAgents = statsData?.agents ?? []
+  const availableClusters = statsData?.clusters ?? []
 
   const activeFilterCount = countActiveFilters(filters)
 
@@ -152,6 +153,30 @@ export function FilterPanel({ filters, onFiltersChange }: FilterPanelProps) {
             </select>
           </FilterSection>
 
+          {/* Cluster filter */}
+          <FilterSection label="Cluster">
+            <select
+              value={filters.cluster ?? ''}
+              onChange={(e) => setFilter('cluster', e.target.value || undefined)}
+              className="
+                w-full h-8 rounded-md
+                bg-surface-2 border border-border/60
+                px-2 text-xs text-text-body
+                hover:border-border
+                focus-visible:outline-none focus-visible:border-brand-cyan-500/60 focus-visible:ring-1 focus-visible:ring-brand-cyan-500/30
+                transition-colors duration-150
+                [color-scheme:dark]
+              "
+            >
+              <option value="">All clusters</option>
+              {availableClusters.map(({ name, count }) => (
+                <option key={name} value={name}>
+                  {name} ({count})
+                </option>
+              ))}
+            </select>
+          </FilterSection>
+
           {/* Tags multi-select */}
           <FilterSection label="Tags">
             {/* Active tag pills */}
@@ -254,6 +279,29 @@ export function FilterPanel({ filters, onFiltersChange }: FilterPanelProps) {
               </div>
             </div>
           </FilterSection>
+
+          {/* Show stale toggle — power-user option, visually de-emphasised */}
+          <div className="flex items-center gap-2.5 pt-1">
+            <input
+              id="filter-show-stale"
+              type="checkbox"
+              checked={filters.includeStale ?? false}
+              onChange={(e) => setFilter('includeStale', e.target.checked || undefined)}
+              className="
+                size-3.5 rounded
+                border border-border/60
+                bg-surface-2
+                accent-brand-cyan-500
+                cursor-pointer
+              "
+            />
+            <label
+              htmlFor="filter-show-stale"
+              className="text-xs text-text-muted cursor-pointer select-none"
+            >
+              Show stale memories
+            </label>
+          </div>
         </div>
       </div>
     </aside>
@@ -282,12 +330,15 @@ function FilterSection({ label, children }: FilterSectionProps) {
 
 /**
  * Returns the number of active filter dimensions so we can show a badge on
- * the collapsed panel header.
+ * the collapsed panel header. The stale toggle is intentionally excluded from
+ * the count — it expands results rather than narrowing them, so treating it as
+ * a "filter" would be semantically misleading.
  */
 function countActiveFilters(filters: SearchFilters): number {
   let count = 0
   if (filters.projectPath) count++
   if (filters.agentName) count++
+  if (filters.cluster) count++
   if (filters.tags?.length) count++
   if (filters.since) count++
   if (filters.until) count++
