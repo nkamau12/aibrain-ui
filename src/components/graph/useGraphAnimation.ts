@@ -6,7 +6,8 @@ import type { ForceGraphMethods } from 'react-force-graph-2d'
 // Animation constants
 // ---------------------------------------------------------------------------
 export const HOVER_LERP_SPEED = 0.18
-export const PROXIMITY_RADIUS = 80  // graph-space units
+export const HOVER_SCALE = 1.3        // hovered node radius multiplier
+export const PROXIMITY_RADIUS = 80   // graph-space units
 export const PROXIMITY_SCALE_MAX = 1.25
 
 // ---------------------------------------------------------------------------
@@ -17,8 +18,16 @@ export interface GraphAnimationState {
   nodeAnimState: MutableRefObject<Map<string, number>>
   /** Cursor position in graph-space coordinates, null when outside canvas */
   cursorGraphPos: MutableRefObject<{ x: number; y: number } | null>
-  /** Start (or continue) the rAF loop — call whenever animation state changes */
+  /**
+   * Start (or continue) the rAF loop.
+   *
+   * The loop ticks as long as `keepAlive.current` is true. Callers (renderNode)
+   * set `keepAlive.current = true` whenever a lerp step is still in progress,
+   * and the loop self-stops once a full tick passes without a keep-alive signal.
+   */
   requestRefresh: () => void
+  /** Set to true inside renderNode whenever a lerp step is non-trivial */
+  keepAlive: MutableRefObject<boolean>
   /** True when the user has opted into reduced motion */
   prefersReducedMotion: MutableRefObject<boolean>
 }
@@ -32,6 +41,7 @@ export function useGraphAnimation(
   const nodeAnimState = useRef<Map<string, number>>(new Map())
   const cursorGraphPos = useRef<{ x: number; y: number } | null>(null)
   const rafId = useRef<number | null>(null)
+  const keepAlive = useRef<boolean>(false)
   const prefersReducedMotion = useRef<boolean>(false)
 
   // Sync prefersReducedMotion from the OS setting and keep it live
@@ -64,18 +74,10 @@ export function useGraphAnimation(
       const graph = graphRef.current
       if (graph) graph.refresh()
 
-      // Check whether all animated values have converged to their targets.
-      // If nothing is still animating, stop the loop.
-      let stillAnimating = false
-      nodeAnimState.current.forEach((value) => {
-        // Values very close to 1.0 (resting) or a stable target are fine;
-        // the callers lerp toward 1.0 or another target — we just need to keep
-        // ticking while any value differs meaningfully from its resting state.
-        // A tolerance of 0.005 is sub-pixel at any practical node size.
-        if (Math.abs(value - 1.0) > 0.005) stillAnimating = true
-      })
-
-      if (stillAnimating) {
+      // renderNode sets keepAlive = true whenever a lerp step is in flight.
+      // If it stayed false after the refresh above, all animations have settled.
+      if (keepAlive.current) {
+        keepAlive.current = false  // reset for the next tick
         rafId.current = requestAnimationFrame(tick)
       } else {
         rafId.current = null
@@ -85,5 +87,5 @@ export function useGraphAnimation(
     rafId.current = requestAnimationFrame(tick)
   }
 
-  return { nodeAnimState, cursorGraphPos, requestRefresh, prefersReducedMotion }
+  return { nodeAnimState, cursorGraphPos, requestRefresh, keepAlive, prefersReducedMotion }
 }
