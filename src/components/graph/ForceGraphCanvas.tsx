@@ -95,10 +95,6 @@ export default function ForceGraphCanvas({
 
   const { nodeAnimState, cursorGraphPos, requestRefresh, keepAlive, prefersReducedMotion } = useGraphAnimation(graphRef)
 
-  // When a node is focused, the pulse animation needs the rAF loop to keep
-  // running even after hover lerps have settled. This ref signals that.
-  const focusPulseActive = useRef(false)
-
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 })
   const [hoveredNodeId, setHoveredNodeId] = useState<string | undefined>()
   const [hoveredLinkId, setHoveredLinkId] = useState<string | undefined>()
@@ -153,8 +149,11 @@ export default function ForceGraphCanvas({
   // Each node is drawn as a filled circle using the cluster color.
   // Hover state drives a smooth lerp on the radius multiplier stored in
   // nodeAnimState. The glow ring uses ctx.shadow* to create a soft halo
-  // using the cluster colour. Focused nodes get an additional cyan outer ring.
-  // Stale nodes are drawn at reduced opacity.
+  // using the cluster colour. Focused nodes get a pulsing cyan outer ring
+  // (sine wave on ring radius). Stale nodes are drawn at reduced opacity
+  // (0.45) with a dashed ring so they remain identifiable. Summary labels
+  // appear when globalScale > 1.8 (user has zoomed in enough).
+  // All animations respect prefers-reduced-motion.
   // ---------------------------------------------------------------------------
   const renderNode = useCallback(
     (raw: RawNode, ctx: CanvasRenderingContext2D, globalScale: number) => {
@@ -170,24 +169,19 @@ export default function ForceGraphCanvas({
       let animMultiplier: number
 
       if (prefersReducedMotion.current) {
-        // Snap immediately — no animation
         animMultiplier = target
       } else {
         animMultiplier = current + (target - current) * HOVER_LERP_SPEED
-        // Snap when close enough to avoid infinite micro-steps
         if (Math.abs(animMultiplier - target) < 0.005) animMultiplier = target
       }
 
-      // Persist the animated value and signal the rAF loop if still moving
       if (animMultiplier !== target) {
         nodeAnimState.current.set(nodeId, animMultiplier)
         keepAlive.current = true
         requestRefresh()
       } else if (animMultiplier !== 1.0) {
-        // At a non-resting stable target (e.g. HOVER_SCALE) — keep the entry
         nodeAnimState.current.set(nodeId, animMultiplier)
       } else {
-        // Fully at rest — remove to keep the map lean
         nodeAnimState.current.delete(nodeId)
       }
 
@@ -198,19 +192,29 @@ export default function ForceGraphCanvas({
       const y = node.y ?? 0
 
       ctx.save()
-      ctx.globalAlpha = node.is_stale ? 0.3 : 1
+      // Stale nodes: raised from 0.3 → 0.45 for better readability
+      ctx.globalAlpha = node.is_stale ? 0.45 : 1
 
-      // Focused ring — rendered before the fill so it sits behind the node body
+      // -- Focused ring with sine pulse -------------------------------------
+      // The pulse expands/contracts the ring radius using sin(time). When
+      // prefers-reduced-motion is on, the ring is static (pulseOffset = 0).
       if (isFocused) {
+        const pulseOffset = prefersReducedMotion.current
+          ? 0
+          : Math.sin(performance.now() * 0.003) * (3 / globalScale)
+
+        // Signal the rAF loop to keep firing so the pulse continues animating
+        keepAlive.current = true
+        requestRefresh()
+
         ctx.beginPath()
-        ctx.arc(x, y, displayRadius + 4 / globalScale, 0, 2 * Math.PI)
+        ctx.arc(x, y, displayRadius + (4 / globalScale) + pulseOffset, 0, 2 * Math.PI)
         ctx.strokeStyle = '#00d9ff'
         ctx.lineWidth = 2 / globalScale
         ctx.stroke()
       }
 
-      // Glow effect — applied only when hovered or focused so idle nodes are
-      // drawn without shadow overhead. The shadow is reset in ctx.restore().
+      // Glow halo — applied when hovered or focused; reset in ctx.restore()
       if (isHovered || isFocused) {
         ctx.shadowColor = isHovered ? clusterColor : '#00d9ff'
         ctx.shadowBlur = (isHovered ? 16 : 10) * animMultiplier
@@ -222,11 +226,38 @@ export default function ForceGraphCanvas({
       ctx.fillStyle = clusterColor
       ctx.fill()
 
+      // -- Stale dashed ring ------------------------------------------------
+      // Drawn after the fill so it's always visible on top of the node body.
+      // Uses the cluster color so it reads as "same node, degraded state".
+      if (node.is_stale) {
+        ctx.setLineDash([3 / globalScale, 3 / globalScale])
+        ctx.beginPath()
+        ctx.arc(x, y, displayRadius + 2 / globalScale, 0, 2 * Math.PI)
+        ctx.strokeStyle = clusterColor
+        ctx.lineWidth = 1 / globalScale
+        ctx.stroke()
+        ctx.setLineDash([])
+      }
+
       ctx.restore()
+
+      // -- Zoom-based summary label ------------------------------------------
+      // Drawn outside save/restore so the label alpha doesn't inherit the
+      // stale dimming — labels should be fully legible regardless of staleness.
+      if (globalScale > 1.8) {
+        const summary = node.summary ?? ''
+        if (summary) {
+          const maxChars = 28
+          const label = summary.length > maxChars ? summary.slice(0, maxChars - 1) + '…' : summary
+          const fontSize = 4 / globalScale
+          ctx.font = `${fontSize}px sans-serif`
+          ctx.fillStyle = 'rgba(255,255,255,0.75)'
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'top'
+          ctx.fillText(label, x, y + displayRadius + 2 / globalScale)
+        }
+      }
     },
-    // hoveredNodeId drives the lerp target; focusedNodeId drives the ring.
-    // The animation refs (nodeAnimState, keepAlive, requestRefresh,
-    // prefersReducedMotion) are stable refs — no need to list them.
     [focusedNodeId, hoveredNodeId, nodeAnimState, keepAlive, requestRefresh, prefersReducedMotion],
   )
 
