@@ -81,6 +81,7 @@ export function GraphLegend({ clusters, className = '' }: GraphLegendProps) {
 
   return (
     <aside
+      role="complementary"
       aria-label="Graph legend"
       className={`
         absolute bottom-4 right-4

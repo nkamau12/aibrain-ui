@@ -329,7 +329,7 @@ export function GraphFilterBar({
   const displayMode = filters.displayMode ?? 'graph'
 
   return (
-    <div className="relative shrink-0">
+    <div className="relative shrink-0" aria-label="Graph filters" role="toolbar">
       {/* ── Main bar ── */}
       <div className="flex items-center gap-3 px-4 h-12 border-b border-border bg-surface/80 backdrop-blur-sm overflow-x-auto">
 

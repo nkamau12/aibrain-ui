@@ -221,7 +221,13 @@ export default function ForceGraphCanvas({
   const rawGraphData = data as unknown as Parameters<typeof ForceGraph2D>[0]['graphData']
 
   return (
-    <div ref={containerRef} className="w-full h-full">
+    <div
+      ref={containerRef}
+      className="w-full h-full"
+      role="img"
+      aria-label="Memory relationship graph — use Table view for keyboard navigation"
+      tabIndex={-1}
+    >
       {ready && viewMode === '2d' && (
         <ForceGraph2D
           ref={graphRef}
