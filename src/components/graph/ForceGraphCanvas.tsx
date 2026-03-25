@@ -4,7 +4,7 @@ import ForceGraph2D from 'react-force-graph-2d'
 import type { ForceGraphMethods, NodeObject, LinkObject } from 'react-force-graph-2d'
 import type { GraphData, GraphNode, GraphLink } from '@/types/memory'
 import { getClusterColor } from '@/lib/cluster-colors'
-import { useGraphAnimation } from './useGraphAnimation'
+import { useGraphAnimation, HOVER_LERP_SPEED, HOVER_SCALE } from './useGraphAnimation'
 
 // ---------------------------------------------------------------------------
 // Lazy-load the 3D renderer so three.js (~600 kB) is never shipped to users
@@ -93,7 +93,7 @@ export default function ForceGraphCanvas({
   // Unparameterised ref matches the default generic of ForceGraph2D
   const graphRef = useRef<ForceGraphMethods | undefined>(undefined) as MutableRefObject<ForceGraphMethods | undefined>
 
-  const { cursorGraphPos } = useGraphAnimation(graphRef)
+  const { nodeAnimState, cursorGraphPos, requestRefresh, keepAlive, prefersReducedMotion } = useGraphAnimation(graphRef)
 
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 })
   const [hoveredNodeId, setHoveredNodeId] = useState<string | undefined>()
@@ -147,7 +147,9 @@ export default function ForceGraphCanvas({
   // Node canvas render (2D only)
   //
   // Each node is drawn as a filled circle using the cluster color.
-  // Focused nodes get a bright outer ring; hovered nodes scale up 1.5×.
+  // Hover state drives a smooth lerp on the radius multiplier stored in
+  // nodeAnimState. The glow ring uses ctx.shadow* to create a soft halo
+  // using the cluster colour. Focused nodes get an additional cyan outer ring.
   // Stale nodes are drawn at reduced opacity.
   // ---------------------------------------------------------------------------
   const renderNode = useCallback(
@@ -155,9 +157,38 @@ export default function ForceGraphCanvas({
       const node = asGraphNode(raw)
       const isFocused = node.id === focusedNodeId
       const isHovered = node.id === hoveredNodeId
+      const nodeId = node.id ?? ''
+      const clusterColor = getClusterColor(node.cluster ?? 'unclustered')
+
+      // -- Lerp the radius multiplier toward its target ----------------------
+      const target = isHovered ? HOVER_SCALE : 1.0
+      const current = nodeAnimState.current.get(nodeId) ?? 1.0
+      let animMultiplier: number
+
+      if (prefersReducedMotion.current) {
+        // Snap immediately — no animation
+        animMultiplier = target
+      } else {
+        animMultiplier = current + (target - current) * HOVER_LERP_SPEED
+        // Snap when close enough to avoid infinite micro-steps
+        if (Math.abs(animMultiplier - target) < 0.005) animMultiplier = target
+      }
+
+      // Persist the animated value and signal the rAF loop if still moving
+      if (animMultiplier !== target) {
+        nodeAnimState.current.set(nodeId, animMultiplier)
+        keepAlive.current = true
+        requestRefresh()
+      } else if (animMultiplier !== 1.0) {
+        // At a non-resting stable target (e.g. HOVER_SCALE) — keep the entry
+        nodeAnimState.current.set(nodeId, animMultiplier)
+      } else {
+        // Fully at rest — remove to keep the map lean
+        nodeAnimState.current.delete(nodeId)
+      }
 
       const baseRadius = nodeRadius(node.connectionCount ?? 0)
-      const displayRadius = isHovered ? baseRadius * 1.5 : baseRadius
+      const displayRadius = (baseRadius * animMultiplier) / globalScale
 
       const x = node.x ?? 0
       const y = node.y ?? 0
@@ -168,21 +199,31 @@ export default function ForceGraphCanvas({
       // Focused ring — rendered before the fill so it sits behind the node body
       if (isFocused) {
         ctx.beginPath()
-        ctx.arc(x, y, (displayRadius + 4) / globalScale, 0, 2 * Math.PI)
+        ctx.arc(x, y, displayRadius + 4 / globalScale, 0, 2 * Math.PI)
         ctx.strokeStyle = '#00d9ff'
         ctx.lineWidth = 2 / globalScale
         ctx.stroke()
       }
 
+      // Glow effect — applied only when hovered or focused so idle nodes are
+      // drawn without shadow overhead. The shadow is reset in ctx.restore().
+      if (isHovered || isFocused) {
+        ctx.shadowColor = isHovered ? clusterColor : '#00d9ff'
+        ctx.shadowBlur = (isHovered ? 16 : 10) * animMultiplier
+      }
+
       // Node body
       ctx.beginPath()
-      ctx.arc(x, y, displayRadius / globalScale, 0, 2 * Math.PI)
-      ctx.fillStyle = getClusterColor(node.cluster ?? 'unclustered')
+      ctx.arc(x, y, displayRadius, 0, 2 * Math.PI)
+      ctx.fillStyle = clusterColor
       ctx.fill()
 
       ctx.restore()
     },
-    [focusedNodeId, hoveredNodeId],
+    // hoveredNodeId drives the lerp target; focusedNodeId drives the ring.
+    // The animation refs (nodeAnimState, keepAlive, requestRefresh,
+    // prefersReducedMotion) are stable refs — no need to list them.
+    [focusedNodeId, hoveredNodeId, nodeAnimState, keepAlive, requestRefresh, prefersReducedMotion],
   )
 
   // ---------------------------------------------------------------------------
