@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { format, formatDistanceToNow } from 'date-fns'
-import { Trash2, ArrowLeft, AlertCircle, Bot, Hash, FolderOpen, Calendar, Layers } from 'lucide-react'
+import { Trash2, ArrowLeft, AlertCircle, Bot, Hash, FolderOpen, Calendar, Layers, Network } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
@@ -415,15 +415,31 @@ export function MemoryDetail({ memory }: MemoryDetailProps) {
             Back
           </Button>
 
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => setShowDeleteConfirm(true)}
-            className="gap-1.5"
-          >
-            <Trash2 className="size-3.5" />
-            Delete
-          </Button>
+          <div className="flex items-center gap-2">
+            <Link
+              to={`/graph?focus=${memory.id}`}
+              className="
+                inline-flex items-center gap-1.5 rounded-md px-3 py-1.5
+                text-sm font-medium text-text-muted
+                hover:text-text-body hover:bg-surface
+                transition-colors duration-150
+                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
+              "
+            >
+              <Network className="size-3.5" />
+              View in Graph
+            </Link>
+
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setShowDeleteConfirm(true)}
+              className="gap-1.5"
+            >
+              <Trash2 className="size-3.5" />
+              Delete
+            </Button>
+          </div>
         </div>
 
         {/* Summary / title + stale badge */}
