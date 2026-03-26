@@ -40,8 +40,18 @@ const DIRECTED_TYPES = new Set<GraphLink['relation_type']>(['supersedes', 'cause
 // ---------------------------------------------------------------------------
 // Node sizing helpers
 // ---------------------------------------------------------------------------
-const NODE_MIN_RADIUS = 8   // was 4 — increased for better visual presence
-const NODE_MAX_EXTRA = 28   // was 16 — connectionCount * 2 capped at this
+//
+// These values are in graph-space units. react-force-graph-2d applies the
+// canvas transform before calling nodeCanvasObject, so 1 graph unit = 1px
+// at globalScale=1. At high zoom (globalScale=10), a radius-28 node becomes
+// 280 screen pixels — filling the entire canvas. Keeping radii small (4-16)
+// ensures the node fits in its neighbourhood at any zoom level.
+//
+// For 3D, radius is halved further (*0.5) giving 2-8 units, which is
+// appropriate for a scene where the default camera starts at z=1000.
+// ---------------------------------------------------------------------------
+const NODE_MIN_RADIUS = 4   // graph-space units; gives 4px at 1x zoom
+const NODE_MAX_EXTRA = 12   // connectionCount * 2 capped — hub cap = 4+12=16
 
 function nodeRadius(connectionCount: number): number {
   return NODE_MIN_RADIUS + Math.min(connectionCount * 2, NODE_MAX_EXTRA)
@@ -109,6 +119,8 @@ export default function ForceGraphCanvas({
     setHoveredNodeId(undefined)
     setHoveredLinkId(undefined)
   }, [viewMode])
+
+
 
   // Track container size with a ResizeObserver so the canvas always fills its
   // parent regardless of how the layout shifts around it.
@@ -210,7 +222,15 @@ export default function ForceGraphCanvas({
         }
       }
 
-      const displayRadius = baseRadius * animMultiplier * proximityMultiplier
+      // Cap displayRadius so no node ever exceeds MAX_NODE_SCREEN_PX screen pixels
+      // regardless of zoom level. Without this cap, a hub node of radius 16 graph
+      // units at globalScale=37 would render as 592 screen pixels — filling the
+      // entire canvas with solid fill color. The cap converts to graph units by
+      // dividing the pixel budget by globalScale: max graph-space radius at any
+      // given zoom = MAX_NODE_SCREEN_PX / globalScale.
+      const MAX_NODE_SCREEN_PX = 80
+      const rawRadius = baseRadius * animMultiplier * proximityMultiplier
+      const displayRadius = Math.min(rawRadius, MAX_NODE_SCREEN_PX / globalScale)
 
       ctx.save()
       // Stale nodes: raised from 0.3 → 0.45 for better readability
@@ -236,9 +256,13 @@ export default function ForceGraphCanvas({
       }
 
       // Glow halo — applied when hovered or focused; reset in ctx.restore()
+      // shadowBlur is in screen pixels (not graph units), so it must NOT be
+      // multiplied by animMultiplier (which is a unitless scale factor) because
+      // at animMultiplier=1.3 and globalScale=10 the glow was already tiny.
+      // A fixed screen-pixel value of 12-18 looks consistent across all zoom levels.
       if (isHovered || isFocused) {
         ctx.shadowColor = isHovered ? clusterColor : '#00d9ff'
-        ctx.shadowBlur = (isHovered ? 16 : 10) * animMultiplier
+        ctx.shadowBlur = isHovered ? 18 : 12
       }
 
       // Node body
@@ -453,6 +477,12 @@ export default function ForceGraphCanvas({
         color: new THREE.Color(clusterColor),
         transparent: true,
         opacity: node.is_stale ? 0.45 : 0.9,
+        // Disable fog on node spheres so they render at full cluster color
+        // regardless of camera distance. The camera starts at z=1000, which
+        // puts nodes ~700-1000 units away — enough for FogExp2 to make them
+        // near-black before the user zooms in. Edges/particles still receive
+        // fog, preserving the depth-atmosphere effect on the scene geometry.
+        fog: false,
       })
       return new THREE.Mesh(geometry, material)
     },
@@ -461,13 +491,22 @@ export default function ForceGraphCanvas({
 
   // ---------------------------------------------------------------------------
   // Fog setup — fires once after the 3D physics engine finishes its warmup.
+  //
+  // Node spheres set material.fog = false so they always render at full cluster
+  // color (see render3DNode). The fog here therefore only affects edges, link
+  // particles, and any other geometry that opts in — giving a subtle spatial-
+  // depth cue without obscuring the nodes themselves.
+  //
+  // Density 0.0018 is a conservative value that keeps fog invisible at d<300
+  // (close-up zoomed view) and noticeable only at d>600 (distant background),
+  // which is appropriate for the edge/particle geometry depth cuing purpose.
   // ---------------------------------------------------------------------------
   const handle3DEngineStop = useCallback(() => {
     const graph = graph3dRef.current
     if (!graph) return
     const scene = graph.scene()
     if (scene && !scene.fog) {
-      scene.fog = new THREE.FogExp2(0x0a0f19, 0.008)
+      scene.fog = new THREE.FogExp2(0x0a0f19, 0.0018)
     }
   }, [])
 
@@ -516,6 +555,63 @@ export default function ForceGraphCanvas({
     requestRefresh()
   }, [cursorGraphPos, requestRefresh])
 
+  // ---------------------------------------------------------------------------
+  // d3-force tuning — applied immediately on 2D mount, before warmupTicks run.
+  //
+  // Why custom forces are needed:
+  // The default d3-force charge is -30 — far too weak for nodes with radii 4-16.
+  // At -30, nodes with overlapping bounding circles won't be pushed apart,
+  // producing the "bunched up" layout where edges are hidden behind nodes.
+  //
+  //   charge (forceManyBody): -200 gives strong enough repulsion for typical
+  //     graphs of 20-200 nodes without disconnected components flying off-screen.
+  //
+  //   link distance: 60 keeps directly-connected nodes readable without
+  //     stretching long chains across the viewport.
+  //
+  // These are set in a useEffect that runs after mount (when graphRef is
+  // populated) but BEFORE the simulation has run its warmupTicks. That means
+  // the forces are in effect for the entire initial layout — no reheat needed,
+  // and no risk of nodes flying off-screen after the camera has already settled.
+  //
+  // The effect re-runs whenever data or viewMode changes so a new graph load
+  // always picks up the tuned forces.
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (viewMode !== '2d') return
+    // graphRef is populated synchronously by React after ForceGraph2D renders,
+    // but we schedule via setTimeout(0) to ensure the library's d3 simulation
+    // has been initialised (it sets up forces inside its own useEffect).
+    const timer = setTimeout(() => {
+      const graph = graphRef.current
+      if (!graph) return
+
+      const charge = graph.d3Force('charge') as ({ strength(s: number): unknown }) | null
+      if (charge && typeof charge.strength === 'function') {
+        charge.strength(-200)
+      }
+
+      const link = graph.d3Force('link') as ({ distance(d: number): unknown }) | null
+      if (link && typeof link.distance === 'function') {
+        link.distance(60)
+      }
+
+      // No d3ReheatSimulation() call here — the forces are set before warmupTicks
+      // fire (setTimeout(0) runs before the library's internal tick scheduler
+      // has a chance to start the initial animation loop), so they take effect
+      // from tick 1. Calling reheat after a stable layout would fling nodes to
+      // new positions while the camera stays fixed — producing a blank canvas.
+    }, 0)
+    return () => clearTimeout(timer)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, viewMode])
+
+  // No-op onEngineStop handler — kept for the 2D component prop; the actual
+  // force tuning now happens in the effect above, not here.
+  const handle2DEngineStop = useCallback(() => {
+    // intentionally empty — force tuning is in the useEffect above
+  }, [])
+
   return (
     <div
       ref={containerRef}
@@ -552,6 +648,7 @@ export default function ForceGraphCanvas({
           onNodeClick={handleNodeClick}
           onNodeHover={handleNodeHover}
           onLinkHover={handleLinkHover}
+          onEngineStop={handle2DEngineStop}
         />
       )}
       {ready && viewMode === '3d' && (
