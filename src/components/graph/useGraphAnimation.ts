@@ -68,13 +68,22 @@ export function useGraphAnimation(
 
   // Wrapped in useCallback so the reference is stable across renders — all
   // dependencies are refs, so the dep array is empty.
+  //
+  // react-force-graph-2d does not expose a `refresh()` method. To force
+  // a canvas repaint we restart the library's internal animation loop by
+  // calling pauseAnimation() + resumeAnimation(). This re-enters
+  // `_animationCycle` which re-renders the canvas without reheating the
+  // d3 simulation (no node movement).
   const requestRefresh = useCallback(() => {
     // Already running — nothing to do
     if (rafId.current !== null) return
 
     const tick = () => {
       const graph = graphRef.current
-      if (graph) graph.refresh()
+      if (graph) {
+        graph.pauseAnimation()
+        graph.resumeAnimation()
+      }
 
       // renderNode sets keepAlive = true whenever a lerp step is in flight.
       // If it stayed false after the refresh above, all animations have settled.
